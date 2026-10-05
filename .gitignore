@@ -21,3 +21,6 @@ data/synthetic/*
 # Система
 .DS_Store
 Thumbs.db
+
+# База живого режима (SQLite)
+data/runtime/

@@ -18,6 +18,7 @@ FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
 
 # Часовой пояс завода (Костанай, UTC+5) — во всех временных метках.
 PLANT_TZ = timezone(timedelta(hours=5))
+TZ_NAME = "UTC+05:00 (Костанай)"
 
 
 def _load_yaml(name: str) -> dict[str, Any]:

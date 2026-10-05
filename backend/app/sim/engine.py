@@ -111,10 +111,12 @@ class Calendar:
 class Recorder:
     """Копит события модели. Слушатели (`listeners`) получают их сразу — для живого потока."""
 
-    def __init__(self, telemetry: bool = True) -> None:
+    def __init__(self, telemetry: bool = True, telemetry_window_min: float | None = None) -> None:
         self.record_telemetry = telemetry
+        self.telemetry_window = telemetry_window_min   # None — хранить всё (история), иначе скользящее окно (живой режим)
         self.events: list[tuple] = []      # (t, scope, id, area_id, state, reason, reason_text, planned)
-        self.telemetry: list[tuple] = []   # (t, equipment_id, temperature, vibration, current, cycle_time, filter_dp)
+        self.telemetry: deque = deque()    # (t, equipment_id, temperature, vibration, current, cycle_time, filter_dp)
+        self.last_telemetry: dict[str, tuple] = {}
         self.units: list[tuple] = []       # (t, unit_id, model, area_id, defect_code)
         self.reports: list[dict] = []
         self.listeners: list[Callable[[str, Any], None]] = []
@@ -128,8 +130,13 @@ class Recorder:
         self._emit("state", row)
 
     def tele(self, row: tuple) -> None:
+        self.last_telemetry[row[1]] = row
         if self.record_telemetry:
             self.telemetry.append(row)
+            if self.telemetry_window is not None:
+                cutoff = row[0] - self.telemetry_window
+                while self.telemetry and self.telemetry[0][0] < cutoff:
+                    self.telemetry.popleft()
         self._emit("telemetry", row)
 
     def unit(self, row: tuple) -> None:
@@ -287,6 +294,7 @@ class PlantSim:
         start: datetime | None = None,
         telemetry: bool = True,
         maintenance_window: str | None = None,
+        telemetry_window_min: float | None = None,
     ) -> None:
         sim = plant["simulation"]
         self.plant = plant
@@ -294,7 +302,9 @@ class PlantSim:
         start = start or datetime.fromisoformat(sim["history_end"]) - timedelta(days=int(sim["history_days"]))
         self.cal = Calendar(start, plant["schedule"]["shifts"], plant["schedule"]["working_weekdays"])
         self.env = simpy.Environment()
-        self.rec = Recorder(telemetry=telemetry)
+        self.rec = Recorder(telemetry=telemetry, telemetry_window_min=telemetry_window_min)
+        # Оборудование, по которому отчёт заполнит человек (сценарий демо), а не генератор текста.
+        self.manual_reports: set[str] = set()
         self.window = maintenance_window or sim.get("maintenance_window", "in_shift")
         self.step = float(sim.get("telemetry_step_min", 1))
         self._report_seq = 0
@@ -639,6 +649,11 @@ class PlantSim:
 
     def _close_report(self, rep: dict, duration: float) -> None:
         eq = self.equipment[rep["equipment_id"]]
+        if eq.id in self.manual_reports:          # черновик останется — его заполнит рабочий в интерфейсе
+            self.manual_reports.discard(eq.id)
+            rep.update(t_end=rep["t_start"] + duration)
+            self.rec.report_close(rep)
+            return
         text = make_report_text(rep["true_subtype"], eq.name, rep["true_reason"], eq.rng)
         rep.update(
             t_end=rep["t_start"] + duration,
