@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (Boolean, Column, Float, Integer, MetaData, String, Table, Text, create_engine, delete,
-                        insert, select, update)
+                        insert, inspect, select, update)
 
 metadata = MetaData()
 
@@ -30,6 +30,14 @@ reports = Table(
     Column("actions_taken", Text),
     Column("reporter_role", String),
     Column("machine_reason_text", String),
+    # Разметка ИИ: что случилось по тексту отчёта и совпадает ли это с выбранной причиной.
+    Column("ai_subtype", String),
+    Column("ai_reason", String),
+    Column("ai_confidence", Float),
+    Column("ai_source", String),         # ml | llm | rules
+    Column("ai_component", String),
+    Column("ai_mismatch", Boolean),
+    Column("ai_note", Text),
     # Истина симулятора — только для оценки ИИ, в интерфейс не отдаётся.
     Column("true_reason", String),
     Column("true_subtype", String),
@@ -60,14 +68,26 @@ imports = Table(
 )
 
 PUBLIC_REPORT_FIELDS = ["id", "equipment_id", "area_id", "ts_start", "ts_end", "duration_min", "source", "status",
-                        "reason", "description", "actions_taken", "reporter_role", "machine_reason_text"]
+                        "reason", "description", "actions_taken", "reporter_role", "machine_reason_text",
+                        "ai_subtype", "ai_reason", "ai_confidence", "ai_source", "ai_component", "ai_mismatch",
+                        "ai_note"]
 
 
 class Database:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.engine = create_engine(f"sqlite:///{path}", connect_args={"check_same_thread": False})
+        self._migrate()
         metadata.create_all(self.engine)
+
+    def _migrate(self) -> None:
+        """Живые таблицы пересоздаются при каждом старте, поэтому при смене схемы их можно просто удалить."""
+        insp = inspect(self.engine)
+        for table in (reports, incidents):
+            if insp.has_table(table.name):
+                have = {c["name"] for c in insp.get_columns(table.name)}
+                if have != {c.name for c in table.columns}:
+                    table.drop(self.engine)
 
     # ── отчёты и инциденты ──
 

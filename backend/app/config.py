@@ -14,7 +14,32 @@ ROOT_DIR = Path(os.environ.get("ALLUR_ROOT", Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT_DIR / "config"
 DATA_DIR = ROOT_DIR / "data"
 TEST_DATA_DIR = DATA_DIR / "test"
+MODELS_DIR = DATA_DIR / "models"          # обученные модели (LightGBM — текстом, коммитится)
+AI_CACHE_DIR = DATA_DIR / "ai_cache"      # ответы LLM — для показа без интернета
 FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
+
+
+def load_dotenv(path: Path | None = None) -> None:
+    """Переменные из `.env` в корне проекта. Уже заданные в окружении не перезаписываются."""
+    path = path or ROOT_DIR / ".env"
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip().removeprefix("export ").strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        elif " #" in value:
+            value = value.split(" #", 1)[0].strip()
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+load_dotenv()
 
 # Часовой пояс завода (Костанай, UTC+5) — во всех временных метках.
 PLANT_TZ = timezone(timedelta(hours=5))

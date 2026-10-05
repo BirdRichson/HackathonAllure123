@@ -326,6 +326,8 @@ def snapshot(rt: "Runtime") -> dict:
         "incidents": rt.db.list_incidents(status="open", limit=30),
         "recent_incidents": rt.db.list_incidents(limit=30),
         "reports": rt.db.list_reports(limit=20),
+        "predictions": rt.ai.predictions(),
+        "ai": rt.ai.brief(),
     }
 
 

@@ -16,8 +16,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from app.assistant.reports import AI_FIELDS, annotate
+from app.assistant.service import AIService, failure_model
 from app.config import DATA_DIR, PLANT_TZ, ROOT_DIR, plant_config
 from app.kpi.incidents import IncidentEngine
+from app.ml.failure import FailureMonitor
+from app.ml.quality import PaintQualityTracker
 from app.sim.engine import DAY_MIN, PlantSim
 from app.storage.db import Database
 
@@ -86,6 +90,9 @@ class World:
         self.sim = PlantSim(plant_config(), seed=self.seed, start=sim_start,
                             telemetry_window_min=settings.telemetry_window_min)
         self.incidents = IncidentEngine(self.sim, self.iso)
+        # ИИ следит за моделью с первой минуты прогрева: риск отказов, связь фильтров с браком
+        self.monitor = FailureMonitor(self.sim, failure_model(), incidents=self.incidents)
+        self.paint_quality = PaintQualityTracker(self.sim)
         self.out = Outbox()
         self.reports: dict[str, dict] = {}
         self.user_touched: set[str] = set()      # отчёты, которые заполнил человек, — генератор их не перезаписывает
@@ -108,6 +115,7 @@ class World:
             "description": r["description"], "actions_taken": r["actions_taken"],
             "reporter_role": r["reporter_role"], "machine_reason_text": r["machine_reason_text"],
             "true_reason": r["true_reason"], "true_subtype": r["true_subtype"],
+            **dict.fromkeys(AI_FIELDS), "ai_mismatch": False,
         }
 
     def _on_record(self, kind: str, payload: Any) -> None:
@@ -117,6 +125,8 @@ class World:
             self.out.units.append(payload)
         elif kind in ("report_open", "report_close"):
             row = self.report_row(payload)
+            if kind == "report_close" and row["description"]:
+                row.update(annotate(row))      # ИИ размечает текст отчёта сразу (локальная модель, ~2 мс)
             self.reports[row["id"]] = row
             self.out.reports[row["id"]] = row
 
@@ -140,6 +150,7 @@ class Runtime:
         self._task: asyncio.Task | None = None
         self._last_kpi = 0.0
         self.world = World(self.settings)
+        self.ai = AIService(self)
         self._install(self.world)
         self._ensure_default_import()
 
@@ -168,6 +179,7 @@ class Runtime:
                             is_default=True)
 
     async def start(self) -> None:
+        self.ai.bind_loop(asyncio.get_running_loop())
         if self.settings.run_loop:
             self._task = asyncio.create_task(self._loop())
             self._prepare_spare()
@@ -210,6 +222,7 @@ class Runtime:
         else:
             world = await asyncio.to_thread(World, self.settings, seed)
         self._install(world)
+        self.ai.on_reset()
         self.paused = False
         self.speed = self.settings.default_speed
         if self.settings.run_loop:
@@ -248,6 +261,7 @@ class Runtime:
         out.reports = {rid: {k: v for k, v in r.items() if k not in ("true_reason", "true_subtype")}
                        for rid, r in out.reports.items()}
         self.db.upsert_incidents(incidents)
+        await self.ai.on_publish()
         if not self.clients:
             return
         payload = views.tick_payload(self, out, incidents)
@@ -268,6 +282,7 @@ class Runtime:
         world = self.world
         values = {k: data.get(k) or "" for k in ("reason", "description", "actions_taken", "reporter_role")}
         values.update(status="completed", source=data.get("source") or "operator_form")
+        values.update(annotate(values))
         target = None
         if data.get("report_id"):                  # рабочий выбрал конкретную запись в журнале
             target = self.db.get_report(data["report_id"])
@@ -296,6 +311,7 @@ class Runtime:
             self.db.upsert_reports([row])
         report = self.db.get_report(rid)
         world.out.reports[rid] = {**report}
+        self.ai.schedule_report_llm(rid)
         return report
 
     def complete_report(self, rid: str, data: dict) -> dict | None:
@@ -306,10 +322,13 @@ class Runtime:
         if values.get("description") or values.get("reason"):
             values["status"] = "completed"
             values.setdefault("source", "operator_form")
+        merged = {**self.db.get_report(rid), **values}
+        values.update(annotate(merged))
         self.db.update_report(rid, values)
         self.world.user_touched.add(rid)
         report = self.db.get_report(rid)
         self.world.out.reports[rid] = {**report}
+        self.ai.schedule_report_llm(rid)
         return report
 
 

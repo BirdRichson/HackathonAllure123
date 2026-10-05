@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
+from app.api.ai import router as ai_router
 from app.api.ingest import router as ingest_router
 from app.api.live import router as live_router
 from app.api.reports import router as reports_router
@@ -36,7 +37,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    for r in (api_router, live_router, reports_router, ingest_router, ws_router):
+    for r in (api_router, live_router, reports_router, ai_router, ingest_router, ws_router):
         app.include_router(r)
 
     # Режим демо на одном ноутбуке: если интерфейс собран, бэкенд отдаёт его сам.

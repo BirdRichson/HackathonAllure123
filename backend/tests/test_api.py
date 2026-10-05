@@ -168,3 +168,73 @@ def test_scenarios_trigger(client):
     assert r.world.sim.equipment["ABB-01"].status == "down"
     assert client.post("/api/scenarios/nope/trigger").status_code == 404
     client.post("/api/sim/control", json={"speed": 10})
+
+
+# ─────────────────────────────── ИИ ───────────────────────────────────────────
+
+
+def test_ai_status_offline(client):
+    s = client.get("/api/ai/status").json()
+    assert s["llm"]["mode"] == "off" and not s["llm"]["online"]
+    assert s["failure_model"]["alert"]["conveyor"]["method"] == "ml"
+    chk = s["report_classifier"]["check_on_simulator_truth"]
+    assert chk is None or chk["subtype_accuracy"] > 0.7
+
+
+def test_insights_rules_offline(client):
+    st = client.get("/api/insights").json()
+    assert st["llm_status"] == "offline" and st["summary"]
+    ids = {i["id"] for i in st["items"]}
+    assert {"month_plan", "reports_quality"} <= ids
+    for i in st["items"]:
+        assert i["title"] and i["recommendation"] and "cars_month" in i["effect"] and i["source"] == "rules"
+    r = client.post("/api/insights/refresh").json()
+    assert r["items"]
+    only_paint = client.get("/api/insights", params={"area": "PAINT"}).json()["items"]
+    assert all(i["area_id"] == "PAINT" for i in only_paint)
+
+
+def test_predictions_and_forecast(client):
+    p = client.get("/api/predictions").json()
+    kinds = {i["equipment_id"]: i["kind"] for i in p["items"]}
+    assert kinds["CONV-03"] == "ml" and kinds["OVEN-01"] == "rule" and kinds["CAM-02"] == "filter"
+    assert kinds["ABB-01"] == "base_rate"
+    f = client.get("/api/plan/forecast").json()
+    assert f["target"] == 5500 and f["p10"] <= f["p50"] <= f["p90"]
+    assert len(f["by_model"]) == 3 and f["band"]
+    assert client.get("/api/state").json()["predictions"]["items"]
+
+
+def test_report_suggest_and_analysis(client):
+    r = client.post("/api/reports/suggest", json={"equipment_id": "CONV-02", "description": "цепь провисла, слетела",
+                                                  "reason": "other"}).json()
+    assert r["prediction"]["subtype"] == "цепь" and r["prediction"]["reason"] == "breakdown"
+    assert r["mismatch"] is True
+    r = client.post("/api/reports/suggest", json={"equipment_id": "CONV-02", "description": "", "use_llm": True}).json()
+    assert r["prediction"] is None
+    a = client.get("/api/reports/analysis").json()
+    assert a["total"] >= a["completed"] and "recurring" in a
+    rep = client.post("/api/reports", json={"equipment_id": "ABB-02", "reason": "operator", "complete_draft": False,
+                                            "description": "ошибка энкодера оси 3, робот встал"}).json()
+    assert rep["ai_subtype"] == "датчик" and rep["ai_mismatch"] is True and "true_reason" not in rep
+
+
+def test_ask_without_llm(client):
+    r = client.post("/api/assistant/ask", json={"question": "Почему упал OEE окраски?"}).json()
+    assert r["answer"] is None and "GROQ_API_KEY" in r["error"]
+
+
+def test_chain_break_is_predicted(client):
+    """Сценарий износа цепи: ИИ открывает предупреждение до обрыва, после обрыва — «сбылось»."""
+    r = rt(client)
+    client.post("/api/scenarios/chain_break/trigger")
+    sim = r.world.sim
+    eq = sim.equipment["CONV-03"]
+    t_end = sim.now + 24 * 60
+    while sim.now < t_end and not any(e[2] == "CONV-03" and e[4] == "down" and e[0] > t_end - 24 * 60
+                                      for e in sim.rec.events[-50:]):
+        sim.run_until(sim.now + 1)
+    assert eq.status == "down" or sim.now < t_end
+    preds = [i for i in r.world.incidents.items.values() if i["type"] == "prediction" and i["equipment_id"] == "CONV-03"]
+    assert preds, "предупреждение не открылось"
+    assert preds[-1]["status"] == "closed" and preds[-1]["details"].startswith("Сбылось")

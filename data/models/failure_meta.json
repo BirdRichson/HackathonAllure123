@@ -1,0 +1,289 @@
+{
+  "features": [
+    "cur_15",
+    "cur_60",
+    "vib_15",
+    "vib_60",
+    "cur_slope",
+    "vib_slope",
+    "temp_sd",
+    "since_to",
+    "is_oven"
+  ],
+  "model_for": [
+    "conveyor"
+  ],
+  "horizon_min": 120.0,
+  "eval_every_min": 5.0,
+  "alert": {
+    "conveyor": {
+      "method": "ml",
+      "thr_on": 0.7,
+      "thr_off": 0.35,
+      "confirm": 2
+    },
+    "oven": {
+      "method": "rule",
+      "feature": "temp_sd",
+      "thr_on": 2.0,
+      "thr_off": 1.5,
+      "confirm": 2
+    }
+  },
+  "trees": 51,
+  "trained_at": "2026-10-05T16:49:34+00:00",
+  "data": {
+    "days_per_seed": 150,
+    "splits": {
+      "train": [
+        1001,
+        1002,
+        1003
+      ],
+      "val": [
+        1004
+      ],
+      "test": [
+        1005
+      ]
+    },
+    "note": "Синтетическая история симулятора, откалиброванного по тестовым данным организаторов."
+  },
+  "metrics": {
+    "test": {
+      "roc_auc": 0.9219944587759044,
+      "pr_auc": 0.7721338738839872,
+      "base_rate": 0.0042746806133519,
+      "failures": 18,
+      "detected": 17,
+      "recall": 0.9444444444444444,
+      "false_alarms": 0,
+      "false_per_1000h": 0.0,
+      "lead_median_min": 87.0,
+      "monitor_hours": 6861
+    },
+    "by_type": {
+      "conveyor": {
+        "method": "LightGBM",
+        "roc_auc": 0.9219944587759044,
+        "pr_auc": 0.7721338738839872,
+        "positives": 264,
+        "failures": 11,
+        "detected": 11,
+        "recall": 1.0,
+        "false_alarms": 0,
+        "false_per_1000h": 0.0,
+        "lead_median_min": 87.0,
+        "lead_min_min": 44.0,
+        "monitor_hours": 5147
+      },
+      "oven": {
+        "method": "правило: разброс температуры ×2",
+        "roc_auc": 0.68658109480615,
+        "pr_auc": 0.214748599952393,
+        "positives": 168,
+        "failures": 7,
+        "detected": 6,
+        "recall": 0.8571428571428571,
+        "false_alarms": 0,
+        "false_per_1000h": 0.0,
+        "lead_median_min": 11.5,
+        "lead_min_min": 3.0,
+        "monitor_hours": 1714
+      }
+    },
+    "rule_baseline": {
+      "conveyor": {
+        "failures": 11,
+        "detected": 11,
+        "recall": 1.0,
+        "false_alarms": 0,
+        "false_per_1000h": 0.0,
+        "lead_median_min": 51.0,
+        "lead_min_min": 24.0,
+        "monitor_hours": 5147
+      }
+    },
+    "oven_ml_attempt": {
+      "roc_auc": 0.7097375932476446,
+      "pr_auc": 0.05210208668758538,
+      "train_failures": 10,
+      "failures": 7,
+      "detected": 0,
+      "recall": 0.0,
+      "false_alarms": 0,
+      "false_per_1000h": 0.0,
+      "lead_median_min": null,
+      "lead_min_min": null,
+      "monitor_hours": 1714
+    },
+    "robots_sensor_errors": {
+      "roc_auc": 0.5223029694324458,
+      "pr_auc": 0.02754396143459665,
+      "base_rate": 0.02668477462927617,
+      "positives": 727
+    },
+    "threshold_grid": {
+      "conveyor": [
+        {
+          "thr": 0.05,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 3,
+          "false_per_1000h": 0.5830053927998834,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.08,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.1,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.15,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.2,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.25,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.3,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.4,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.5,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.6,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        },
+        {
+          "thr": 0.7,
+          "failures": 11,
+          "detected": 11,
+          "recall": 1.0,
+          "false_alarms": 0,
+          "false_per_1000h": 0.0,
+          "lead_median_min": 63.0,
+          "lead_min_min": 39.0,
+          "monitor_hours": 5146
+        }
+      ]
+    },
+    "live_replay": {
+      "failures": 18,
+      "predicted": 17,
+      "false_alarms": 0,
+      "mean_lead_min": 59.0,
+      "from_t": 0.0
+    },
+    "forecast": {
+      "checks": 12,
+      "coverage_10_90": 1.0,
+      "mape_p50": 0.16832378713397336,
+      "by_workday": {
+        "5": 0.26308159241215734,
+        "10": 0.1419018837170894,
+        "15": 0.09998788527267341
+      },
+      "months": 4,
+      "shift_mean": 115.80092592592592
+    },
+    "reports": {
+      "corpus": 3500,
+      "acc_synthetic": 1.0,
+      "holdout": 35,
+      "acc_holdout": 0.9714285714285714,
+      "acc_rules_holdout": 0.8285714285714286
+    }
+  },
+  "importance_gain": {
+    "cur_15": 967.3,
+    "cur_60": 7683.8,
+    "vib_15": 58817.2,
+    "vib_60": 1501.7,
+    "cur_slope": 361.1,
+    "vib_slope": 580.2,
+    "temp_sd": 653.0,
+    "since_to": 4138.1,
+    "is_oven": 0.0
+  }
+}

@@ -18,7 +18,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
     },
     "chain_break": {
         "title": "Износ цепи Конвейера-03",
-        "details": "Ток привода и вибрация растут ~25 минут работы, затем цепь рвётся. Отчёт заполняет рабочий.",
+        "details": "Ток привода и вибрация растут ~40 минут работы, ИИ предупреждает об обрыве заранее, затем цепь рвётся. Отчёт заполняет рабочий.",
         "equipment_id": "CONV-03",
     },
     "filter_clog": {
@@ -38,7 +38,7 @@ def trigger(sim, name: str) -> dict[str, Any]:
         sim.schedule_failure(eq_id, "sensor_error", in_op_min=0.5)
     elif name == "chain_break":
         sim.manual_reports.add(eq_id)
-        sim.schedule_failure(eq_id, "chain_break", in_op_min=25, lead_min=25)
+        sim.schedule_failure(eq_id, "chain_break", in_op_min=40, lead_min=40)
     elif name == "filter_clog":
         # Короткий «ресурс», чтобы рост перепада был виден за полчаса работы, а не за сутки.
         eq = sim.equipment[eq_id]

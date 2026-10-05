@@ -24,3 +24,8 @@ Thumbs.db
 
 # База живого режима (SQLite)
 data/runtime/
+
+# ИИ: кэш ответов LLM (создаётся при первом запуске с ключом) и модель текста (зависит от версии sklearn).
+# Модель прогноза отказов data/models/failure_lgbm.txt — коммитится.
+data/ai_cache/
+data/models/*.joblib

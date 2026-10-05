@@ -12,7 +12,7 @@ help:
 	@echo "make build    — собрать фронтенд в frontend/dist"
 	@echo "make demo     — собрать и запустить всё одним процессом на :8000 (для показа, без интернета)"
 	@echo "make seed     — сгенерировать историю симулятора (этап 1)"
-	@echo "make train    — обучить модели (этап 4)"
+	@echo "make train    — обучить и проверить модели ИИ (~3 мин), отчёт в docs/ML_REPORT.md"
 
 $(PY):
 	$(PY_SYS) -m venv $(VENV)
@@ -40,7 +40,7 @@ seed:
 	cd backend && ../$(PY) -m app.sim.history
 
 train:
-	@echo "Обучение моделей появится на этапе 4."
+	cd backend && ../$(PY) -m ml_train.train
 
 clean:
 	rm -rf frontend/dist backend/.pytest_cache
