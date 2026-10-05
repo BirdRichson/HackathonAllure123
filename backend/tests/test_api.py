@@ -238,3 +238,47 @@ def test_chain_break_is_predicted(client):
     preds = [i for i in r.world.incidents.items.values() if i["type"] == "prediction" and i["equipment_id"] == "CONV-03"]
     assert preds, "предупреждение не открылось"
     assert preds[-1]["status"] == "closed" and preds[-1]["details"].startswith("Сбылось")
+
+
+def test_llm_path_with_mock_provider(client, tmp_path, monkeypatch):
+    """Полный путь через «Groq» без сети: выводы, вопрос, разбор отчёта — с подменённым ответом провайдера."""
+    import json as _json
+
+    import httpx
+
+    from app.assistant.llm import LLMClient
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        body = _json.loads(req.content)
+        system, user = body["messages"][0]["content"], body["messages"][1]["content"]
+        if "Перепиши" in system:                       # выводы: возвращаем те же тексты, порядок обратный
+            data = _json.loads(user)
+            items = [{"id": i["id"], "title": i["заголовок"], "summary": i["суть"], "recommendation": i["рекомендация"]}
+                     for i in data["выводы"]]
+            out = {"summary": "Главное за период — потери времени и брак окраски.", "items": items,
+                   "order": [i["id"] for i in reversed(items)]}
+        elif "Рабочий описал" in system:
+            out = {"subtype": "цепь", "reason": "breakdown", "component": "звёздочка привода", "confidence": 0.9,
+                   "note": "Проверьте износ звёздочки."}
+        else:
+            out = {"answer": "Окраска даёт брак из-за засорённых фильтров.", "follow_up": ["Когда менять фильтры?"]}
+        return httpx.Response(200, json={"choices": [{"message": {"content": _json.dumps(out, ensure_ascii=False)}}]})
+
+    svc = rt(client).ai
+    old = svc.llm
+    monkeypatch.setenv("ALLUR_LLM_PROVIDER", "groq")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test")
+    svc.llm = LLMClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    try:
+        st = client.post("/api/insights/refresh", params={"force": True}).json()
+        assert st["llm_status"] == "ok" and st["summary_source"] == "llm"
+        assert st["llm"]["provider"] == "groq" and all(i["source"] == "llm" for i in st["items"])
+        assert client.get("/api/state").json()["ai"]["llm_online"] is True
+        a = client.post("/api/assistant/ask", json={"question": "Почему брак на окраске?"}).json()
+        assert a["answer"].startswith("Окраска") and a["follow_up"]
+        s = client.post("/api/reports/suggest", json={"equipment_id": "CONV-01", "description": "звёздочка стёрлась",
+                                                      "reason": "operator", "use_llm": True}).json()
+        assert s["prediction"]["source"] == "llm" and s["prediction"]["component"] == "звёздочка привода"
+        assert s["mismatch"] is True
+    finally:
+        svc.llm = old

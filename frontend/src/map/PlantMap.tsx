@@ -4,7 +4,7 @@ import { pct } from "../format";
 import { onUnits, useLive } from "../store/live";
 import { useUi } from "../store/ui";
 import { BODY, HEX, STATE } from "../theme/states";
-import type { AreaBrief, EquipmentBrief, State } from "../types";
+import type { AreaBrief, EquipmentBrief, PredictionItem, State } from "../types";
 import { bufferModels, current, onFlow } from "./flow";
 import { P, shade } from "./iso";
 import {
@@ -315,25 +315,36 @@ function RoomLabel({ room, area, lines }: { room: Room; area?: AreaBrief; lines:
   );
 }
 
-function Pin({ p, eq, onClick }: { p: Placement; eq: EquipmentBrief; onClick: () => void }) {
+const AI_COLOR = "#6a4bc4";
+
+function Pin({ p, eq, risk, onClick }: { p: Placement; eq: EquipmentBrief; risk?: PredictionItem; onClick: () => void }) {
   const [x, y] = P(p.x + p.w / 2, p.y + p.d / 2, p.h + 0.9);
   const [bx, by] = P(p.x + p.w / 2, p.y + p.d / 2, p.h);
   const st = STATE[eq.state];
   // Подпись с текстом — только для собственных остановок оборудования; ожидание видно по цвету маркера.
   const alert = eq.state === "down" || eq.state === "maintenance" || eq.state === "setup";
-  const label = alert ? `${eq.name}: ${st.label.toLowerCase()}` : eq.name;
+  // Предупреждение ИИ: станок ещё работает, но модель видит предвестник отказа.
+  const warn = !alert && risk?.alert;
+  const what = risk?.failure ? risk.failure.toLowerCase() : "отказ";
+  const label = alert
+    ? `${eq.name}: ${st.label.toLowerCase()}`
+    : warn
+      ? `ИИ: ${eq.name} — ${risk!.kind === "ml" ? `риск «${what}» ${pct(risk!.risk ?? 0, 0)}` : `признак «${what}»`}`
+      : eq.name;
   const width = Math.max(56, label.length * 6.8 + 14);
+  const fill = alert ? HEX[eq.state] : warn ? AI_COLOR : "#ffffff";
   return (
     <g className="cursor-pointer" onClick={onClick}>
       <line x1={bx} y1={by} x2={x} y2={y} stroke="#8b96a1" strokeWidth={1} />
       {eq.state === "down" && <circle cx={x} cy={y} r={9} fill="none" stroke={HEX.down} strokeWidth={3} className="alarm-ring" />}
-      <circle cx={x} cy={y} r={8.5} fill={HEX[eq.state]} stroke="#ffffff" strokeWidth={2} />
+      {warn && <circle cx={x} cy={y} r={9} fill="none" stroke={AI_COLOR} strokeWidth={3} className="alarm-ring" />}
+      <circle cx={x} cy={y} r={8.5} fill={warn ? AI_COLOR : HEX[eq.state]} stroke="#ffffff" strokeWidth={2} />
       <text x={x} y={y + 3.6} textAnchor="middle" fontSize={10} fill="#ffffff" fontWeight={700}>
-        {st.icon}
+        {warn ? "!" : st.icon}
       </text>
       <g transform={`translate(${x + 13},${y - 10})`}>
-        <rect width={width} height={20} rx={4} fill={alert ? HEX[eq.state] : "#ffffff"} stroke={alert ? "none" : "#c6ced6"} opacity={0.96} />
-        <text x={7} y={14} fontSize={12} fill={alert ? "#ffffff" : "#3d4955"} fontWeight={alert ? 600 : 500}>
+        <rect width={width} height={20} rx={4} fill={fill} stroke={alert || warn ? "none" : "#c6ced6"} opacity={0.96} />
+        <text x={7} y={14} fontSize={12} fill={alert || warn ? "#ffffff" : "#3d4955"} fontWeight={alert || warn ? 600 : 500}>
           {label}
         </text>
       </g>
@@ -347,8 +358,10 @@ export function PlantMap() {
   const areas = useLive((s) => s.areas);
   const equipment = useLive((s) => s.equipment);
   const kpi = useLive((s) => s.kpi);
+  const predictions = useLive((s) => s.predictions);
   const openArea = useUi((s) => s.openAreaPanel);
   const vb = useMemo(viewBox, []);
+  const riskById = new Map((predictions?.items ?? []).map((r) => [r.equipment_id, r]));
 
   const area = (id: string) => areas.find((a) => a.id === id);
   const eqById = new Map(equipment.map((e) => [e.id, e]));
@@ -426,7 +439,7 @@ export function PlantMap() {
       })}
       {PLACEMENTS.map((p) => {
         const eq = eqById.get(p.id);
-        return eq ? <Pin key={p.id} p={p} eq={eq} onClick={() => openArea(eq.area_id, eq.id)} /> : null;
+        return eq ? <Pin key={p.id} p={p} eq={eq} risk={riskById.get(p.id)} onClick={() => openArea(eq.area_id, eq.id)} /> : null;
       })}
     </svg>
   );

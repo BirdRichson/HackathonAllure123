@@ -52,8 +52,13 @@
 {"id":"R-000187","equipment_id":"CAM-02","area_id":"PAINT","ts_start":"...","ts_end":"...","duration_min":40.5,
  "source":"machine|operator_form|telegram|import","status":"draft|completed",
  "reason":"consumables","description":"камера встала, фильтр забит","actions_taken":"заменили фильтры",
- "reporter_role":"оператор|наладчик|мастер","machine_reason_text":"Замена фильтра"}
+ "reporter_role":"оператор|наладчик|мастер","machine_reason_text":"Замена фильтра",
+ "ai_subtype":"фильтр","ai_reason":"consumables","ai_confidence":0.97,"ai_source":"ml|llm|rules",
+ "ai_component":"фильтры потолка","ai_mismatch":false,"ai_note":null}
 ```
+- Поля `ai_*` — разметка ИИ по тексту отчёта. Подтипы: `датчик, цепь, горелка, калибровка, фильтр, плановое ТО, микроостановка`.
+- `ai_mismatch` — причина, выбранная рабочим, не совпадает с текстом (уверенность ИИ ≥ 0,6). Микроостановку с «Прочим» за ошибку не считаем.
+- `ai_note` — совет мастеру; его даёт только LLM.
 - Станок остановился — появляется `draft` (`source: machine`). Рабочий заполняет причину и текст — отчёт становится `completed`.
 - `machine_reason_text` — причина, которую зафиксировал станок или журнал.
 - Истинные причины симулятора (`true_reason`, `true_subtype`) хранятся в БД для оценки ИИ и **через API не отдаются**.
@@ -74,7 +79,7 @@
 | `quality` | брак участка за смену > 2% (после 40 кузовов и 3 дефектов); закрывается в конце смены | critical, если > 4% |
 | `threshold` | незапланированный простой критического оборудования за сутки ≥ 45 мин | warning; > 60 мин — critical |
 | `oee` | OEE участка за закрытую смену < 85% | warning; < 75% — critical |
-| `prediction` | прогноз отказа (этап 4) | ⏳ |
+| `prediction` | ИИ видит предвестник отказа: риск LightGBM выше порога 2 оценки подряд (конвейеры) или разброс температуры ×2 (печь). Закрывается: «Сбылось…» при отказе, при ТО или когда риск падает вдвое | warning |
 
 ### Статус ТО ✅
 ```json
@@ -89,20 +94,57 @@
 ```
 Единицы: °C, мм/с, А, секунды, Па. `filter_dp` есть только у камер окраски.
 
-### Вывод ИИ ⏳ (этап 4)
+### Вывод ИИ ✅
 ```json
-{"id":"INS-0012","ts":"...","scope":"plant|area|equipment","target_id":"CAM-02",
- "kind":"recurring|quality_link|maintenance|misclassified|failure_risk|plan_risk",
- "title":"Фильтр Камеры-02 забивается раньше интервала ТО","explanation":"...",
- "evidence":[{"type":"report","ref":"R-000187"},{"type":"metric","ref":"PAINT.defect_rate"}],
- "recommendation":"Менять фильтр ночью, в нерабочее окно, каждые 110 моточасов",
- "expected_effect":{"units_month":95,"downtime_min_month":160},"confidence":0.8,"source":"llm|ml|rules"}
+{"id":"paint_filters","kind":"quality","severity":"critical","area_id":"PAINT","equipment_ids":["CAM-01","CAM-02"],
+ "title":"Брак окраски растёт вместе с засорением фильтров камер",
+ "summary":"При перепаде на фильтрах 300 Па и выше брак окраски 8,3%, при чистых фильтрах — 2,4%. …",
+ "evidence":["1 752 из 4 640 кузовов за 30 дней окрашены при перепаде ≥300 Па", "…"],
+ "recommendation":"Менять фильтры по состоянию: … в ближайшую ночь, в нерабочее окно 00:00–08:00.",
+ "effect":{"cars_month":50,"defects_month":113,"minutes_month":201,"text":"≈ −113 дефектов окраски в месяц …"},
+ "cost":"фильтры будут меняться чаще — расход ≈ +46%","assumptions":["…"],
+ "confidence":"высокая|средняя","source":"llm|rules","rank":1}
+```
+- `id` — вид вывода: `paint_filters`, `maintenance_night`, `wear_failures`, `robot_sensors`, `reports_quality`, `month_plan`.
+- **Цифры (`evidence`, `effect`) всегда считает код** по данным за 30 дней до конца последней закрытой смены.
+- LLM переписывает только `title`, `summary`, `recommendation` и порядок. Числа в её тексте сверяются с расчётом; если есть лишнее число, остаётся шаблон, `source: rules`.
+
+Состояние выводов (`GET /api/insights`):
+```json
+{"generated_at":"...","period":{"from":"...","to":"...","workdays":20},"summary":"…","summary_source":"llm|rules",
+ "items":[…],"llm":{"provider":"groq","model":"openai/gpt-oss-120b","label":"Groq · openai/gpt-oss-120b",
+ "cached":false,"latency_ms":2300,"rejected_by_guard":0},
+ "llm_status":"ok|pending|offline|error","llm_error":null,
+ "reports":{…сводка по отчётам…},"loss_by_area":{"Сварка":957.0}}
 ```
 
-### Прогноз отказа ⏳ (этап 4)
+### Прогноз отказа ✅
+Элемент `GET /api/predictions` → `items[]`, по одному на оборудование. Вид зависит от `kind`.
+
+| `kind` | Оборудование | Поля |
+|---|---|---|
+| `ml` | конвейеры (LightGBM) | `risk` (0–1, отказ в ближайшие 2 ч), `threshold`, `alert`, `factors[]` |
+| `rule` | печь (разброс температуры) | `indicator` (×к норме), `threshold`, `alert`, `factors[]` |
+| `filter` | камеры окраски | `dp`, `rate_pa_h`, `hours_to_swap`, `hours_to_limit`, `limit_ts` |
+| `base_rate` | роботы, стенды (случайные сбои) | `risk` — фоновая вероятность по частоте, `per_month` |
+
 ```json
-{"ts":"...","equipment_id":"CONV-03","failure_prob_4h":0.78,"top_factors":["current_trend_60m","vibration_trend_60m"],
- "recommendation":"Заменить/натянуть цепь Конвейера-03 ночью, до начала смены"}
+{"equipment_id":"CONV-03","name":"Конвейер-03","area_id":"ASSY","type":"conveyor","status":"ok","kind":"ml",
+ "risk":0.976,"level":"low|medium|high","alert":true,"threshold":0.7,"risk_ts":"...","failure":"Обрыв цепи",
+ "factors":[{"feature":"vib_15","label":"Вибрация, 15 мин","value":"+39% к норме","weight":7.75}],
+ "note":"Модель LightGBM по току, вибрации и наработке"}
+```
+Ответ целиком: `{"horizon_min":120,"updated":"...","model_loaded":true,"items":[…],
+"stats_30d":{"failures":4,"predicted":4,"mean_lead_min":77}}`.
+
+### Прогноз месяца ✅
+`GET /api/plan/forecast`:
+```json
+{"as_of":"...","month":"2026-10","target":5500,"plan_models":4800,"output_mtd":505,
+ "p10":5063,"p50":5106,"p90":5148,"prob_target":0.0,"shift_mean":115.9,"shift_std":3.1,
+ "shifts_left":39.7,"shifts_total":44,"required_per_shift":125.9,"max_theoretical":5558,
+ "band":[{"date":"2026-10-05","p10":…,"p50":…,"p90":…}],"actual":[{"date":"2026-10-01","cum":118}],
+ "by_model":[{"model":"Chevrolet Onix","plan":2500,"mtd":329,"forecast":2473,"share":0.466}]}
 ```
 
 ## WebSocket ✅ `/ws/live`
@@ -115,7 +157,8 @@
 | `tick` | каждые ~0,5 с | `sim_time, speed, paused`; текущие `areas` и `equipment` (состояние, причина, последняя телеметрия); изменения за шаг: `events`, `units` (для анимации кузовов), `reports`, `incidents` |
 | `kpi` | каждые ~2 с | как `GET /api/kpi` |
 | `status` | после смены скорости или паузы | `sim_time, speed, paused, speeds, seed` |
-| `prediction`, `insight` | этап 4 | ⏳ |
+| `predictions` | когда пересчитан риск (раз в 5 мин модели), не чаще 1 раза в 2 с | как `GET /api/predictions` |
+| `insights` | новые выводы (после каждой смены), ответ LLM, обновление | как `GET /api/insights` |
 
 ## REST
 
@@ -124,7 +167,7 @@
 | `GET /api/health` | `{status, version, data_mode, time}` | ✅ |
 | `GET /api/plant` | модель завода из `plant.yaml` | ✅ |
 | `GET /api/targets` | цели из `targets.yaml` | ✅ |
-| `GET /api/state` | полный снимок: статус, смена, участки (с буферами), оборудование (состояние, телеметрия, ТО), KPI, инциденты, последние отчёты | ✅ |
+| `GET /api/state` | полный снимок: статус, смена, участки (с буферами), оборудование (состояние, телеметрия, ТО), KPI, инциденты, последние отчёты, `predictions`, `ai` (`llm_online`, `llm_label`, `failure_model`) | ✅ |
 | `GET /api/kpi` | KPI смены, суток (по участкам и заводу) и выпуск месяца против цели | ✅ |
 | `GET /api/kpi/history?area=&shifts=12` | KPI закрытых смен участка | ✅ |
 | `GET /api/areas/{id}` | страница цеха: участок, оборудование с ТО, KPI (смена, сутки, история), Парето простоев за 30 дней, отчёты, инциденты | ✅ |
@@ -141,11 +184,16 @@
 | `POST /api/ingest` (multipart `files`) | загрузка docx / xlsx / csv, разбор и находки | ✅ |
 | `GET /api/ingest/latest` | последний импорт; при первом запуске подгружается `data/raw/*.docx` | ✅ |
 | `POST /api/sim/control` | `{speed, paused, reset, seed}`; скорости 1, 10, 60, 300 | ✅ |
-| `GET /api/insights`, `POST /api/insights/refresh` | выводы ИИ | ⏳ 4 |
-| `GET /api/predictions` | прогнозы отказов | ⏳ 4 |
-| `GET /api/plan/forecast` | прогноз месяца против 5500 | ⏳ 4 |
-| `GET /api/scenarios`, `POST /api/scenarios/{name}/trigger` | сценарии демо: `sensor_fault` (ABB-01), `chain_break` (Конвейер-03, предвестник ~25 мин), `filter_clog` (Камера-02) | ✅ |
-| `POST /api/whatif`, `GET /api/bottlenecks`, `POST /api/assistant/ask` | после 8.10 | — |
+| `GET /api/insights?area=` | выводы ИИ за 30 дней; `area` — только выводы цеха | ✅ |
+| `POST /api/insights/refresh?force=` | пересчитать; `force=true` — заново спросить LLM, не из кэша | ✅ |
+| `GET /api/predictions` | риск отказа по оборудованию | ✅ |
+| `GET /api/plan/forecast` | прогноз месяца против 5500 | ✅ |
+| `GET /api/reports/analysis?days=30&area=` | сводка ИИ по отчётам: незаполненные, неверные причины, повторы | ✅ |
+| `POST /api/reports/suggest` | `{equipment_id, description, actions_taken, reason, use_llm}` → подсказка причины и `mismatch` | ✅ |
+| `POST /api/assistant/ask` | `{question, area_id}` → `{answer, follow_up[], source}`; без LLM — `{answer: null, error}` | ✅ |
+| `GET /api/ai/status` | провайдеры LLM, кэш, последний вызов, метрики моделей, проверка разметки на истине симулятора | ✅ |
+| `GET /api/scenarios`, `POST /api/scenarios/{name}/trigger` | сценарии демо: `sensor_fault` (ABB-01), `chain_break` (Конвейер-03, предвестник ~40 мин, ИИ предупреждает заранее), `filter_clog` (Камера-02) | ✅ |
+| `POST /api/whatif`, `GET /api/bottlenecks` | после 8.10 | — |
 
 ## Импорт данных организаторов ✅
 
@@ -190,3 +238,15 @@
 - `set_filter_remaining(equipment_id, remaining_h)`;
 - `manual_reports` — по этому оборудованию отчёт заполнит человек;
 - `maintenance_window = "night"`.
+
+## Настройки ИИ (переменные окружения, файл `.env`)
+
+| Переменная | Значение |
+|---|---|
+| `GROQ_API_KEY` | ключ Groq (бесплатно: console.groq.com/keys) |
+| `GEMINI_API_KEY` | ключ Google Gemini (бесплатно: aistudio.google.com/apikey) |
+| `GROQ_MODEL`, `GEMINI_MODEL` | модели через запятую; по умолчанию `openai/gpt-oss-120b,llama-3.3-70b-versatile` и `gemini-3.5-flash,gemini-3.1-flash-lite` |
+| `ALLUR_LLM_PROVIDER` | `auto` (по умолчанию) · `groq` · `gemini` · `off` |
+| `ALLUR_LLM_ORDER` | порядок для `auto`, по умолчанию `groq,gemini` |
+| `ALLUR_LLM_TIMEOUT` | таймаут запроса, с (25) |
+| `ALLUR_AI_CACHE_DIR` | папка кэша ответов (по умолчанию `data/ai_cache`) |

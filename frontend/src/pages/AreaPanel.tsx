@@ -2,13 +2,14 @@ import { useEffect } from "react";
 
 import { api } from "../api/client";
 import { ParetoChart, ShiftHistoryChart, TelemetryChart } from "../charts/charts";
+import { AiTag, InsightCard, RiskPanel } from "../components/ai";
 import { Empty, MaintenanceBar, Section, SeverityMark, StateChip, TargetBar } from "../components/ui";
 import { dateTime, hhmm, hours, int, minutes, num, pct } from "../format";
 import { usePoll } from "../hooks/usePoll";
 import { useLive } from "../store/live";
 import { useUi } from "../store/ui";
 import { LEVEL_COLOR } from "../theme/states";
-import type { AreaView, EquipmentBrief, Kpi, Targets } from "../types";
+import type { AreaView, EquipmentBrief, Kpi, Report, Targets } from "../types";
 import { useEquipmentName } from "./PlantPage";
 
 function KpiTile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -138,6 +139,32 @@ function EquipmentRow({
   );
 }
 
+function AreaAi({ areaId }: { areaId: string }) {
+  const insights = useLive((s) => s.insights);
+  const items = (insights?.items ?? []).filter((i) => i.area_id === areaId);
+  return (
+    <div className="rounded-lg bg-panel p-4">
+      <Section
+        title={
+          <span className="flex items-center gap-2">
+            ИИ по цеху <AiTag />
+          </span>
+        }
+        aside="риск отказа в ближайшие 2 ч"
+      >
+        <RiskPanel area={areaId} />
+        {items.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2">
+            {items.map((i) => (
+              <InsightCard key={i.id} i={i} inArea />
+            ))}
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
 function KpiNote({ k, t }: { k: Kpi | null; t: Targets }) {
   if (!k) return null;
   return (
@@ -252,6 +279,7 @@ export function AreaPanel() {
                                   {r.reporter_role && `${r.reporter_role}: `}
                                   {sentence(r.description || "без описания")}
                                   {r.actions_taken && ` Сделано: ${sentence(r.actions_taken)}`}
+                                  <AiReportNote r={r} />
                                 </div>
                               ) : (
                                 <button
@@ -272,6 +300,7 @@ export function AreaPanel() {
               </div>
 
               <div className="flex flex-col gap-4">
+                <AreaAi areaId={view.area.id} />
                 <div className="rounded-lg bg-panel p-4">
                   <Section title="Причины простоев" aside={`за ${view.pareto.days} дней`}>
                     {stops.length ? <ParetoChart reasons={stops} /> : <Empty>Простоев не было.</Empty>}
@@ -346,3 +375,28 @@ function Swatch({ color, label }: { color: string; label: string }) {
     </span>
   );
 }
+
+/** Короткая пометка ИИ под отчётом: что по тексту случилось и не перепутана ли причина. */
+export function AiReportNote({ r }: { r: Report }) {
+  if (!r.ai_subtype) return null;
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
+      <AiTag title={r.ai_source === "llm" ? "Разобрал LLM" : "Локальная модель"} />
+      <span className="text-ink">
+        {SUBTYPE_TEXT[r.ai_subtype] ?? r.ai_subtype}
+        {r.ai_component ? `, ${r.ai_component}` : ""}
+      </span>
+      {r.ai_mismatch && <span className="font-medium text-bad">причина в отчёте, похоже, указана неверно</span>}
+    </div>
+  );
+}
+
+export const SUBTYPE_TEXT: Record<string, string> = {
+  датчик: "сбой датчика",
+  цепь: "износ или обрыв цепи",
+  горелка: "сбой горелки печи",
+  калибровка: "сбой калибровки стенда",
+  фильтр: "засорение фильтра",
+  "плановое ТО": "плановое ТО",
+  микроостановка: "микроостановка",
+};

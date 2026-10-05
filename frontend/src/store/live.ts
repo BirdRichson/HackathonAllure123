@@ -2,7 +2,10 @@ import { create } from "zustand";
 
 import { api } from "../api/client";
 import type {
+  AiBrief,
   AreaBrief,
+  InsightsState,
+  Predictions,
   EquipmentBrief,
   Incident,
   KpiNow,
@@ -34,6 +37,9 @@ interface LiveState {
   tickSeq: number;
   /** Растёт при новом отчёте или инциденте — повод перезапросить списки. */
   journalSeq: number;
+  predictions: Predictions | null;
+  insights: InsightsState | null;
+  ai: AiBrief | null;
 }
 
 const MAX_EVENTS = 400;
@@ -51,6 +57,9 @@ export const useLive = create<LiveState>(() => ({
   events: [],
   tickSeq: 0,
   journalSeq: 0,
+  predictions: null,
+  insights: null,
+  ai: null,
 }));
 
 function mergeById<T extends { id: string }>(list: T[], updates: T[], sortKey: keyof T, limit: number): T[] {
@@ -83,7 +92,11 @@ function applySnapshot(s: Snapshot) {
     events: [],
     tickSeq: st.tickSeq + 1,
     journalSeq: st.journalSeq + 1,
+    predictions: s.predictions,
+    ai: s.ai,
+    insights: null,
   }));
+  api.insights().then((ins) => useLive.setState({ insights: ins })).catch(() => {});
 }
 
 function applyTick(t: Tick) {
@@ -128,6 +141,8 @@ export function connectLive() {
       const k = msg.payload as KpiNow;
       useLive.setState({ kpi: k, shift: k.shift });
     } else if (msg.type === "status") useLive.setState({ status: msg.payload as Status });
+    else if (msg.type === "predictions") useLive.setState({ predictions: msg.payload as Predictions });
+    else if (msg.type === "insights") useLive.setState({ insights: msg.payload as InsightsState });
   };
   socket.onclose = () => {
     useLive.setState({ connection: "offline" });

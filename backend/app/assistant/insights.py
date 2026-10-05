@@ -440,7 +440,7 @@ def llm_rewrite(client: LLMClient, insights: list[dict], facts: dict, kpi: dict 
     items = {it.get("id"): it for it in data.get("items", []) if isinstance(it, dict)}
     out = []
     for i in insights:
-        new = dict(i)
+        new = {"source": "rules", **i}
         it = items.get(i["id"])
         if it:
             fields = {f: str(it.get(f) or "").strip() for f in ("title", "summary", "recommendation")}

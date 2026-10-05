@@ -144,6 +144,14 @@ export interface Report {
   actions_taken: string;
   reporter_role: string;
   machine_reason_text: string;
+  // Разметка ИИ: что случилось по тексту и совпадает ли с выбранной причиной
+  ai_subtype?: string | null;
+  ai_reason?: string | null;
+  ai_confidence?: number | null;
+  ai_source?: "ml" | "llm" | "rules" | null;
+  ai_component?: string | null;
+  ai_mismatch?: boolean | null;
+  ai_note?: string | null;
 }
 
 export interface StateEvent {
@@ -173,6 +181,163 @@ export interface Snapshot extends Status {
   incidents: Incident[];
   recent_incidents: Incident[];
   reports: Report[];
+  predictions: Predictions;
+  ai: AiBrief;
+}
+
+// ─────────────────────────────── ИИ ───────────────────────────────
+
+export interface AiBrief {
+  llm_online: boolean;
+  llm_label: string | null;
+  failure_model: boolean;
+}
+
+export interface InsightEffect {
+  cars_month?: number;
+  defects_month?: number;
+  minutes_month?: number;
+  text: string;
+}
+
+export interface Insight {
+  id: string;
+  kind: string;
+  severity: Severity;
+  area_id: string | null;
+  equipment_ids: string[];
+  title: string;
+  summary: string;
+  evidence: string[];
+  recommendation: string;
+  effect: InsightEffect;
+  cost?: string;
+  assumptions?: string[];
+  confidence: string;
+  source: "llm" | "rules";
+  rank: number;
+}
+
+export interface Recurring {
+  equipment_id: string;
+  name: string;
+  subtype: string;
+  subtype_label: string;
+  count: number;
+  minutes: number;
+  components: { name: string; count: number }[];
+}
+
+export interface ReportsAnalysis {
+  total: number;
+  completed: number;
+  drafts: number;
+  draft_share: number;
+  mismatches: number;
+  mismatch_share: number;
+  mismatch_chosen: { reason: string; count: number }[];
+  mismatch_examples: {
+    id: string;
+    equipment_id: string;
+    name: string;
+    ts_start: string;
+    description: string;
+    chosen: string;
+    ai: string;
+    ai_subtype: string;
+    confidence: number;
+  }[];
+  by_subtype: { subtype: string; label: string; count: number; minutes: number }[];
+  recurring: Recurring[];
+}
+
+export interface InsightsState {
+  generated_at: string;
+  period: { from: string; to: string; workdays: number };
+  summary: string;
+  summary_source: "llm" | "rules";
+  items: Insight[];
+  llm: { provider: string; model: string; label: string; cached: boolean; latency_ms: number; rejected_by_guard: number } | null;
+  llm_status: "ok" | "pending" | "offline" | "error";
+  llm_error: string | null;
+  reports: ReportsAnalysis;
+  loss_by_area: Record<string, number>;
+}
+
+export interface RiskFactor {
+  feature: string;
+  label: string;
+  value: string;
+  weight: number;
+}
+
+export interface PredictionItem {
+  equipment_id: string;
+  name: string;
+  area_id: string;
+  type: string;
+  status: string;
+  kind: "ml" | "rule" | "filter" | "base_rate";
+  level: "low" | "medium" | "high";
+  failure: string;
+  note: string;
+  risk?: number | null;
+  alert?: boolean;
+  threshold?: number;
+  factors?: RiskFactor[];
+  indicator?: number | null;
+  per_month?: number;
+  dp?: number | null;
+  swap_pa?: number;
+  limit_pa?: number;
+  rate_pa_h?: number | null;
+  hours_to_swap?: number | null;
+  hours_to_limit?: number | null;
+  limit_ts?: string | null;
+}
+
+export interface Predictions {
+  horizon_min: number;
+  updated: string;
+  model_loaded: boolean;
+  items: PredictionItem[];
+  stats_30d: { failures: number; predicted: number; mean_lead_min: number | null };
+}
+
+export interface PlanForecast {
+  as_of: string;
+  month: string;
+  target: number;
+  plan_models: number;
+  output_mtd: number;
+  p10: number;
+  p50: number;
+  p90: number;
+  prob_target: number;
+  shift_mean: number;
+  shift_std: number;
+  shifts_left: number;
+  shifts_total: number;
+  required_per_shift: number | null;
+  max_theoretical: number;
+  band: { date: string; p10: number; p50: number; p90: number }[];
+  actual: { date: string; cum: number }[];
+  by_model: { model: string; plan: number; mtd: number; forecast: number; share: number }[];
+}
+
+export interface Suggestion {
+  prediction: {
+    subtype: string;
+    subtype_label: string;
+    reason: string;
+    reason_label: string;
+    confidence: number;
+    source: "ml" | "llm" | "rules";
+    component: string;
+    note: string;
+  } | null;
+  mismatch: boolean;
+  llm_error?: string;
 }
 
 export interface Tick extends Status {

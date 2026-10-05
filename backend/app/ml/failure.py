@@ -286,8 +286,10 @@ class FailureMonitor:
         return f"Прогноз ИИ: {tr.eq.name} — риск «{what}» {p * 100:.0f}% в ближайшие 2 ч"
 
     def _details(self, tr: Tracked, x: np.ndarray) -> str:
-        parts = [f"{f['label'].split(',')[0]} {f['value']}" for f in self.model.factors(x, eq_type=tr.eq.type)] \
+        parts = [f"{f['label'].split(',')[0].lower()} {f['value']}" for f in self.model.factors(x, eq_type=tr.eq.type)] \
             if self.model else []
+        if parts:
+            parts[0] = parts[0][0].upper() + parts[0][1:]
         rec = ("Осмотрите цепь и натяжение при ближайшей возможности" if not tr.is_oven
                else "Проверьте горелку и электрод розжига при ближайшей возможности")
         head = (", ".join(parts) + ". ") if parts else ""

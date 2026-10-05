@@ -1,5 +1,5 @@
-import { hhmm, ddmm, minutes, pct } from "../format";
-import type { EquipmentView, ParetoReason, ShiftKpi } from "../types";
+import { hhmm, ddmm, int, minutes, pct } from "../format";
+import type { EquipmentView, ParetoReason, PlanForecast, ShiftKpi } from "../types";
 import { C, Chart, axis, base } from "./echarts";
 
 const KIND_COLOR: Record<ParetoReason["kind"], string> = {
@@ -207,6 +207,86 @@ export function TelemetryChart({ eq, height = 250 }: { eq: EquipmentView; height
               { type: "value", scale: true, ...axis, splitLine: { show: false } },
             ],
         series,
+      }}
+    />
+  );
+}
+
+/** Выпуск с начала месяца: факт по дням, прогноз с коридором 10–90% и цель. */
+export function ForecastChart({ f, height = 240 }: { f: PlanForecast; height?: number }) {
+  const last = f.actual[f.actual.length - 1];
+  const band = [...f.band];
+  if (last && (!band.length || band[0]!.date !== last.date)) band.unshift({ date: last.date, p10: last.cum, p50: last.cum, p90: last.cum });
+  const dates = [...new Set([...f.actual.map((a) => a.date), ...band.map((b) => b.date)])].sort();
+  const actual = new Map(f.actual.map((a) => [a.date, a.cum]));
+  const bmap = new Map(band.map((b) => [b.date, b]));
+  const v = (d: string, k: "p10" | "p50" | "p90") => bmap.get(d)?.[k] ?? null;
+  const top = Math.max(f.target, f.p90) * 1.06;
+  return (
+    <Chart
+      style={{ height }}
+      option={{
+        ...base,
+        grid: { left: 52, right: 86, top: 16, bottom: 28 },
+        tooltip: {
+          ...base.tooltip,
+          formatter: (ps: { dataIndex: number }[]) => {
+            const d = dates[ps[0]!.dataIndex]!;
+            const a = actual.get(d);
+            const b = bmap.get(d);
+            const rows = [`<b>${ddmm(d)}</b>`];
+            if (a != null) rows.push(`Факт: ${int(a)}`);
+            if (b && a == null) rows.push(`Прогноз: ${int(b.p50)} (${int(b.p10)}–${int(b.p90)})`);
+            return rows.join("<br/>");
+          },
+        },
+        xAxis: {
+          type: "category",
+          data: dates,
+          boundaryGap: false,
+          ...axis,
+          axisLabel: { color: C.muted, formatter: (d: string) => ddmm(d), interval: Math.ceil(dates.length / 8) },
+        },
+        yAxis: { type: "value", min: 0, max: Math.ceil(top / 500) * 500, ...axis, axisLabel: { color: C.muted, formatter: (x: number) => int(x) } },
+        series: [
+          { name: "низ", type: "line", stack: "band", data: dates.map((d) => v(d, "p10")), showSymbol: false, lineStyle: { opacity: 0 } },
+          {
+            name: "коридор",
+            type: "line",
+            stack: "band",
+            data: dates.map((d) => {
+              const lo = v(d, "p10");
+              const hi = v(d, "p90");
+              return lo == null || hi == null ? null : hi - lo;
+            }),
+            showSymbol: false,
+            lineStyle: { opacity: 0 },
+            areaStyle: { color: "rgba(239,138,20,0.22)" },
+          },
+          {
+            name: "Прогноз",
+            type: "line",
+            data: dates.map((d) => v(d, "p50")),
+            showSymbol: false,
+            lineStyle: { color: C.signal, width: 2, type: "dashed" },
+            itemStyle: { color: C.signal },
+          },
+          {
+            name: "Факт",
+            type: "line",
+            data: dates.map((d) => actual.get(d) ?? null),
+            symbolSize: 5,
+            lineStyle: { color: C.steel, width: 2.4 },
+            itemStyle: { color: C.steel },
+            markLine: {
+              silent: true,
+              symbol: "none",
+              lineStyle: { color: C.ok, type: "dashed" },
+              label: { formatter: `цель ${int(f.target)}`, color: C.ok, position: "end" },
+              data: [{ yAxis: f.target }],
+            },
+          },
+        ],
       }}
     />
   );

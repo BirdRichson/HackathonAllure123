@@ -36,6 +36,26 @@ export function SpeedControl() {
   );
 }
 
+function AiStatus() {
+  const ai = useLive((s) => s.ai);
+  if (!ai) return null;
+  const online = ai.llm_online;
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-sm"
+      title={
+        online
+          ? `Языковая модель: ${ai.llm_label}. Прогноз отказов и разбор отчётов работают локально.`
+          : "Языковая модель не подключена (нет ключа Groq/Gemini в .env). Прогнозы, разбор отчётов и выводы работают офлайн."
+      }
+    >
+      <span className="rounded bg-[#efe9fb] px-1 text-[11px] font-semibold text-[#5b3fb0]">ИИ</span>
+      <span className={online ? "text-ink" : "text-muted"}>{online ? (ai.llm_label ?? "").split(" · ")[0] : "офлайн"}</span>
+      <span className="inline-block h-2 w-2 rounded-full" style={{ background: online ? "var(--color-ok)" : "var(--color-off)" }} />
+    </div>
+  );
+}
+
 export function TopBar() {
   const { status, shift, connection } = useLive();
   const { tab, setTab } = useUi();
@@ -69,6 +89,7 @@ export function TopBar() {
       </nav>
 
       <div className="ml-auto flex items-center gap-5">
+        <AiStatus />
         {status && shift && (
           <div className="flex items-center gap-3">
             <div className="cond text-[34px] leading-none font-semibold">{hhmm(status.sim_time)}</div>

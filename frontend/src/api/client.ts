@@ -6,8 +6,13 @@ import type {
   Incident,
   KpiNow,
   Maintenance,
+  InsightsState,
   Plant,
+  PlanForecast,
+  Predictions,
   Report,
+  ReportsAnalysis,
+  Suggestion,
   ShiftKpi,
   Snapshot,
   Status,
@@ -73,6 +78,18 @@ export const api = {
     request<Status>("/api/sim/control", json(body)),
   scenarios: () => request<Record<string, { title: string; details: string }>>("/api/scenarios"),
   trigger: (name: string) => request<{ title: string }>(`/api/scenarios/${name}/trigger`, { method: "POST" }),
+  insights: (area?: string) => request<InsightsState>(`/api/insights${area ? `?area=${area}` : ""}`),
+  refreshInsights: (force = false) => request<InsightsState>(`/api/insights/refresh?force=${force}`, { method: "POST" }),
+  predictions: () => request<Predictions>("/api/predictions"),
+  planForecast: () => request<PlanForecast>("/api/plan/forecast"),
+  reportsAnalysis: (area?: string) => request<ReportsAnalysis>(`/api/reports/analysis${area ? `?area=${area}` : ""}`),
+  suggest: (body: { equipment_id: string; description: string; actions_taken?: string; reason?: string | null; use_llm?: boolean }) =>
+    request<Suggestion>("/api/reports/suggest", json(body)),
+  ask: (question: string, area_id?: string) =>
+    request<{ answer: string | null; error?: string; follow_up?: string[]; source?: string; cached?: boolean }>(
+      "/api/assistant/ask",
+      json({ question, area_id }),
+    ),
   latestImport: () => request<ImportResult>("/api/ingest/latest"),
   upload: (files: FileList) => {
     const fd = new FormData();

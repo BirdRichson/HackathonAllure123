@@ -1,12 +1,107 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api/client";
+import { AiTag } from "../components/ai";
 import { Section, StateChip } from "../components/ui";
-import { dateTime, diffMin, hhmm, minutes } from "../format";
+import { dateTime, diffMin, hhmm, minutes, pct } from "../format";
 import { usePoll } from "../hooks/usePoll";
 import { useLive } from "../store/live";
 import { useUi } from "../store/ui";
-import type { Report } from "../types";
+import type { Report, Suggestion } from "../types";
+import { SUBTYPE_TEXT } from "./AreaPanel";
+
+/** Подсказка ИИ, пока рабочий пишет: что случилось по тексту и какую причину выбрать. */
+function AiHint({
+  eqId,
+  description,
+  actions,
+  reason,
+  onPick,
+}: {
+  eqId: string | null;
+  description: string;
+  actions: string;
+  reason: string | null;
+  onPick: (code: string) => void;
+}) {
+  const llmOnline = useLive((s) => s.ai?.llm_online ?? false);
+  const [hint, setHint] = useState<Suggestion | null>(null);
+  const [llmBusy, setLlmBusy] = useState(false);
+  const text = description.trim();
+
+  useEffect(() => {
+    if (!eqId || text.length < 6) {
+      setHint(null);
+      return;
+    }
+    const id = setTimeout(() => {
+      api
+        .suggest({ equipment_id: eqId, description: text, actions_taken: actions, reason })
+        .then(setHint)
+        .catch(() => {});
+    }, 350);
+    return () => clearTimeout(id);
+  }, [eqId, text, actions, reason]);
+
+  if (!hint?.prediction) return null;
+  const p = hint.prediction;
+  const askLlm = async () => {
+    if (!eqId) return;
+    setLlmBusy(true);
+    try {
+      setHint(await api.suggest({ equipment_id: eqId, description: text, actions_taken: actions, reason, use_llm: true }));
+    } finally {
+      setLlmBusy(false);
+    }
+  };
+  return (
+    <div className={`mt-2 rounded-md px-3 py-2 text-sm ${hint.mismatch ? "bg-[#fbe2df]" : "bg-[#f4f1fc]"}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <AiTag title={p.source === "llm" ? "Разобрала языковая модель" : "Локальная модель, работает без сети"} />
+        <span>
+          По описанию — <b>{SUBTYPE_TEXT[p.subtype] ?? p.subtype}</b>
+          {p.component ? ` (${p.component})` : ""}, причина «{p.reason_label}», уверенность {pct(p.confidence, 0)}
+        </span>
+        {reason !== p.reason && (
+          <button type="button" onClick={() => onPick(p.reason)} className="rounded border border-ink bg-panel px-2 py-0.5 text-xs font-medium hover:bg-sunk">
+            Выбрать «{p.reason_label}»
+          </button>
+        )}
+        {llmOnline && p.source !== "llm" && (
+          <button type="button" disabled={llmBusy} onClick={() => void askLlm()} className="text-xs text-info hover:underline disabled:opacity-50">
+            {llmBusy ? "LLM разбирает…" : "уточнить у LLM"}
+          </button>
+        )}
+      </div>
+      {hint.mismatch && <div className="mt-1 font-medium text-bad">Выбранная причина не совпадает с описанием — проверьте, пожалуйста.</div>}
+      {p.note && <div className="mt-1 text-ink">Совет: {p.note}</div>}
+      {hint.llm_error && <div className="mt-1 text-xs text-muted">LLM недоступна, показан ответ локальной модели.</div>}
+    </div>
+  );
+}
+
+function AnalysisStrip({ area, seq }: { area: string; seq: number }) {
+  const { data: a } = usePoll(() => api.reportsAnalysis(area || undefined), [area, seq], 15000);
+  if (!a || !a.total) return null;
+  const rec = a.recurring[0];
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-md bg-[#f4f1fc] px-3 py-2 text-sm">
+      <AiTag title="Сводка ИИ по отчётам за 30 дней" />
+      <span>
+        Не заполнено: <b>{a.drafts}</b> из {a.total}
+      </span>
+      <span>
+        Причина, похоже, указана неверно: <b>{a.mismatches}</b> ({pct(a.mismatch_share, 0)})
+      </span>
+      {rec && (
+        <span>
+          Чаще всего: <b>{rec.name}</b> — {rec.subtype_label}, {rec.count} раз
+          {rec.components[0] ? ` (${rec.components[0].name})` : ""}
+        </span>
+      )}
+    </div>
+  );
+}
 
 const AREAS: [string, string][] = [
   ["WELD", "Сварка"],
@@ -163,6 +258,7 @@ function ReportForm({ reports, labels }: { reports: Report[]; labels: Record<str
           placeholder="Например: цепь гремела с начала смены, потом оборвалась"
           className="w-full rounded-md border border-line bg-panel px-3 py-2 text-[15px]"
         />
+        <AiHint eqId={eqId} description={description} actions={actions} reason={reason} onPick={setReason} />
         <input
           value={actions}
           onChange={(e) => setActions(e.target.value)}
@@ -285,6 +381,7 @@ export function DowntimePage() {
               ))}
             </select>
           </div>
+          <AnalysisStrip area={area} seq={journalSeq} />
           <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-panel text-left text-muted">
@@ -293,6 +390,7 @@ export function DowntimePage() {
                   <th className="py-2 pr-3 font-normal">Оборудование</th>
                   <th className="py-2 pr-3 font-normal">Станок зафиксировал</th>
                   <th className="py-2 pr-3 font-normal">Причина от рабочего</th>
+                  <th className="py-2 pr-3 font-normal">По тексту (ИИ)</th>
                   <th className="py-2 pr-3 font-normal">Описание</th>
                   <th className="py-2 text-right font-normal">Длит.</th>
                 </tr>
@@ -320,7 +418,17 @@ export function DowntimePage() {
                         </button>
                       )}
                     </td>
-                    <td className="max-w-[420px] py-2 pr-3 text-muted">
+                    <td className="py-2 pr-3">
+                      {r.ai_subtype ? (
+                        <span className={r.ai_mismatch ? "font-medium text-bad" : "text-ink"} title={r.ai_mismatch ? "Причина не совпадает с текстом" : undefined}>
+                          {SUBTYPE_TEXT[r.ai_subtype] ?? r.ai_subtype}
+                          {r.ai_mismatch ? " ≠" : ""}
+                        </span>
+                      ) : (
+                        <span className="text-faint">—</span>
+                      )}
+                    </td>
+                    <td className="max-w-[380px] py-2 pr-3 text-muted">
                       {r.description}
                       {r.reporter_role && <span className="text-faint"> — {r.reporter_role}</span>}
                     </td>

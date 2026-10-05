@@ -129,3 +129,36 @@ def test_bootstrap_month():
     assert 2500 + 20 * 110 < f["p50"] < 2500 + 20 * 122
     assert f["prob_target"] == 0.0 and f["required_per_shift"] == pytest.approx(150, abs=0.1)
     assert len(f["band"]) == 10 and f["band"][-1]["p50"] == pytest.approx(f["p50"], abs=2)
+
+
+def test_llm_rewrite_guard():
+    """LLM переписывает текст выводов; выдуманные числа отбрасываются, эффект остаётся из расчёта."""
+    from app.assistant.insights import llm_rewrite
+    from app.assistant.llm import LLMResult
+
+    items = [
+        {"id": "a", "severity": "critical", "title": "Брак 8,3%", "summary": "Брак 8,3% против 2,4%.",
+         "evidence": ["1752 кузова"], "recommendation": "Менять фильтр при 300 Па.",
+         "effect": {"cars_month": 50, "text": "до +50 авто"}, "rank": 1},
+        {"id": "b", "severity": "info", "title": "ТО", "summary": "16 ТО, 500 мин.", "evidence": [],
+         "recommendation": "Ночью.", "effect": {"cars_month": 125, "text": "до +125 авто"}, "rank": 2},
+    ]
+    facts = {"period": {"from": "2026-09-05", "to": "2026-10-05", "workdays": 20}, "loss_by_area": {"Сварка": 957.0}}
+
+    class Stub:
+        def complete_json(self, task, system, user, max_tokens=0, use_cache=True):
+            return LLMResult({"summary": "Главное — фильтры: брак 8,3% против 2,4%.",
+                              "items": [{"id": "a", "title": "Фильтры портят окраску",
+                                         "summary": "При 300 Па брак 8,3%, при чистых — 2,4%.",
+                                         "recommendation": "Менять ночью при 300 Па."},
+                                        {"id": "b", "title": "ТО ночью", "summary": "Потери 777 мин в месяц.",
+                                         "recommendation": "Перенести ТО ночью."}],
+                              "order": ["b", "a"]}, "groq", "test-model")
+
+    summary, out, meta = llm_rewrite(Stub(), items, facts, None)
+    assert summary.startswith("Главное")
+    by = {i["id"]: i for i in out}
+    assert by["a"]["source"] == "llm" and by["a"]["title"] == "Фильтры портят окраску"
+    assert by["b"]["source"] == "rules" and by["b"]["summary"] == "16 ТО, 500 мин."   # 777 — выдумано
+    assert [i["id"] for i in out] == ["b", "a"] and meta["rejected_by_guard"] == 1
+    assert by["a"]["effect"]["cars_month"] == 50

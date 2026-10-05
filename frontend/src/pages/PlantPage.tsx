@@ -1,3 +1,4 @@
+import { AiTag } from "../components/ai";
 import { Section, SeverityMark, StateChip, TargetBar } from "../components/ui";
 import { hhmm, int, pct } from "../format";
 import { PlantMap } from "../map/PlantMap";
@@ -141,7 +142,10 @@ function FeedColumn() {
               onClick={() => i.area_id && openArea(i.area_id, i.equipment_id)}
             >
               <div className="flex items-center justify-between">
-                <SeverityMark severity={i.severity} />
+                <span className="flex items-center gap-2">
+                  <SeverityMark severity={i.severity} />
+                  {i.type === "prediction" && <AiTag title="Предупреждение ИИ до отказа" />}
+                </span>
                 <span className="text-xs text-muted">с {hhmm(i.ts_start)}</span>
               </div>
               <div className="mt-1 font-medium leading-snug">{i.title}</div>
@@ -174,7 +178,14 @@ function FeedColumn() {
                 {r.duration_min != null ? `, ${Math.round(r.duration_min)} мин` : ", идёт сейчас"}
               </div>
               {r.status === "completed" ? (
-                <div className="mt-0.5 line-clamp-2">{r.description || "Без описания"}</div>
+                <>
+                  <div className="mt-0.5 line-clamp-2">{r.description || "Без описания"}</div>
+                  {r.ai_mismatch && (
+                    <div className="mt-0.5 flex items-center gap-1.5 text-xs text-bad">
+                      <AiTag /> причина, похоже, указана неверно
+                    </div>
+                  )}
+                </>
               ) : (
                 <button
                   type="button"
