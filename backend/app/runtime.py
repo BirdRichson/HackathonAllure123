@@ -30,16 +30,19 @@ from app.storage.db import Database
 
 
 def _live_start(cfg: dict) -> datetime:
-    """Последний рабочий день (сегодня или раньше) в заданное время — «сейчас» на заводе при запуске демо."""
+    """«Сейчас» на заводе при запуске демо: ALLUR_LIVE_START, иначе `live.start_date` из конфига,
+    иначе последний рабочий день по часам компьютера. Время — `live.start_time`."""
     env = os.environ.get("ALLUR_LIVE_START")
     if env:
         return datetime.fromisoformat(env).replace(tzinfo=None)
+    h, m = cfg["start_time"].split(":")
+    if cfg.get("start_date"):
+        return datetime.fromisoformat(str(cfg["start_date"])).replace(hour=int(h), minute=int(m))
     today = datetime.now(PLANT_TZ).replace(tzinfo=None)
     workdays = set(plant_config()["schedule"]["working_weekdays"])
     d = today
     while d.isoweekday() not in workdays:
         d -= timedelta(days=1)
-    h, m = cfg["start_time"].split(":")
     return d.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
 
 

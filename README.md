@@ -94,6 +94,7 @@ docker compose up --build
 ```bash
 make demo      # соберёт интерфейс и запустит всё на http://localhost:8000
 ```
+На Windows — двойной щелчок по `scripts\demo.cmd`, затем откройте http://localhost:8000.
 
 ## Команды
 
@@ -120,6 +121,14 @@ docs/        статус, решения, контракты, разбор да
 
 ## Документы
 
+Для подачи:
+- [docs/TECH.md](docs/TECH.md) — архитектура, данные, технологии, библиотеки, AI-инструменты
+- [docs/BUSINESS_CASE.md](docs/BUSINESS_CASE.md) — эффект, ограничения, условия внедрения, план пилота
+- [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) — защита на 3 минуты по секундам, ответы на вопросы жюри
+- [docs/SUBMISSION.md](docs/SUBMISSION.md) — чек-лист подачи и тексты для формы
+- [docs/video/demo-backup.mp4](docs/video/demo-backup.mp4) — запись демо с подписями (2 мин)
+
+Для команды:
 - [docs/STATUS.md](docs/STATUS.md) — текущее состояние и следующие шаги
 - [docs/TEST_DATA.md](docs/TEST_DATA.md) — тестовые данные, расчёты и решения D1–D11
 - [docs/DECISIONS.md](docs/DECISIONS.md) — журнал решений

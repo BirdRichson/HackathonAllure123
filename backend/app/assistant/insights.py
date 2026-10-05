@@ -321,7 +321,7 @@ def rule_insights(facts: dict) -> list[dict]:
         left_share = fc["shifts_left"] / max(fc["shifts_total"], 1)
         with_measures = fc["p50"] + measures * left_share
         target = fc["target"]
-        ev = [f"Прогноз на конец месяца: {n0(fc['p50'])} авто (80% интервал {n0(fc['p10'])}–{n0(fc['p90'])}), "
+        ev = [f"Прогноз на конец месяца (на начало смены): {n0(fc['p50'])} авто (80% интервал {n0(fc['p10'])}–{n0(fc['p90'])}), "
               f"вероятность выполнить цель — {pct(fc['prob_target'], 0)}",
               f"Средняя смена — {n0(fc['shift_mean'])} авто; для цели нужно {n0(fc['required_per_shift'] or 0)} за смену",
               f"Предел двух смен при идеальном цикле {num(plant_config()['rates']['ideal_cycle_min'])} мин — "

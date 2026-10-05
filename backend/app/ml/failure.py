@@ -317,6 +317,7 @@ class FailureMonitor:
     def _on_failure(self, tr: Tracked, t: float) -> None:
         if t < self.active_from or self.model is None:
             return
+        tr.risk, tr.x = None, None       # пока станок в ремонте, риск не показываем: после ремонта отсчёт заново
         alerted = bool(tr.alert and tr.alert.active and tr.alert_t is not None)
         lead = round(t - tr.alert_t, 1) if alerted else None
         self.outcomes.append({"equipment_id": tr.eq.id, "t": t, "alerted": alerted, "lead_min": lead})
