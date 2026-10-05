@@ -161,3 +161,21 @@
 - неизвестная причина простоя записывается как `other` с предупреждением.
 
 Ответ — отчёт валидации: сколько строк загружено, предупреждения, найденные расхождения (сверка потерь времени с простоями).
+
+## История симуляции ✅ (этап 1)
+
+`make seed` → `data/synthetic/` (в git не попадает, генерируется за ~10 с). Время везде в UTC+5.
+
+| Файл | Колонки |
+|---|---|
+| `events.parquet` | `ts, scope (area/equipment), id, area_id, state, reason, reason_text, planned` — смены состояний |
+| `telemetry.parquet` | `ts, equipment_id, temperature, vibration, current, cycle_time, filter_dp` — раз в минуту в рабочее время; `filter_dp` только у камер окраски |
+| `units.parquet` | `ts, unit_id, model, area_id, defect_code, result` — кузов закончил цикл на участке; `defect_code` пустой = годный |
+| `reports.parquet` | отчёт о простое (см. выше) плюс скрытые поля `true_reason`, `true_subtype`, `machine_reason_text` — истина для оценки ИИ, в интерфейс не отдаются; `duration_min` |
+| `shifts.parquet` | `date, shift, area_id, plan_units, fact_units, defects, defect_rate, run_h, down_min, maintenance_min, setup_min, starved_min, blocked_min, lost_min, registered_min` |
+| `meta.json` | seed, период, число строк, пометка «демо-данные» |
+
+Хуки сценариев в `PlantSim`:
+- `schedule_failure(equipment_id, mode_id, in_op_min, lead_min)` — отказ через заданную наработку, с предвестником;
+- `set_filter_remaining(equipment_id, remaining_h)` — фильтр засорится через заданное время;
+- `maintenance_window = "night"` — плановое ТО переносится в нерабочее окно.

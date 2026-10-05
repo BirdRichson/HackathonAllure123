@@ -57,3 +57,114 @@ equipment:
   - { id: CONV-03, name: "Конвейер-03",     area: ASSY,  type: conveyor,   critical: true, source: data }
   - { id: QC-01,   name: "Стенд геометрии", area: QC,    type: test_stand, critical: false, source: assumption }
   - { id: QC-02,   name: "Стенд герметичности", area: QC, type: test_stand, critical: false, source: assumption }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Параметры симулятора (этап 1). Всё ниже — допущения модели (source: assumption),
+# откалиброванные так, чтобы смены выглядели как в тестовых данных организаторов:
+# факт 110–121 за смену, время работы 7,2–8,0 ч, брак сварка ≈2%, окраска ≈4%, сборка ≈1%.
+# ─────────────────────────────────────────────────────────────────────────────
+
+simulation:
+  seed: 42
+  history_days: 60
+  history_end: "2026-09-30"        # история за 60 суток до начала периода тестовых данных
+  telemetry_step_min: 1
+  maintenance_window: in_shift     # как сейчас на заводе (ТО ABB-04 — в смену). Альтернатива: night
+
+supply:                            # склад CKD-комплектов
+  initial_stock: 420
+  delivery_time: "06:00"
+  delivery_units: 250
+  delivery_weekdays: [1, 2, 3, 4, 5]
+
+process:                           # циклы участков, мин; брак — базовая вероятность на кузов
+  WELD:  { cycle_min: 3.90, cycle_cv: 0.025, defect_rate: 0.020, defect_codes: { WELD_SPOT: 0.6, WELD_GEOM: 0.4 } }
+  PAINT: { cycle_min: 3.92, cycle_cv: 0.025, defect_rate: 0.023, defect_codes: { PAINT_RUN: 0.45, PAINT_ORANGE: 0.35, PAINT_DIRT: 0.20 } }
+  ASSY:  { cycle_min: 3.88, cycle_cv: 0.025, defect_rate: 0.011, defect_codes: { ASSY_GAP: 0.6, ASSY_TORQUE: 0.4 } }
+  QC:    { cycle_min: 3.80, cycle_cv: 0.030, defect_rate: 0.0,   defect_codes: {} }
+
+changeover:                        # переналадка сварки при смене модели
+  area: WELD
+  minutes: [3, 7]
+  batch_size: [40, 80]             # кузовов одной модели подряд
+
+micro_stops:                       # короткие остановки, которые обычно не записывают
+  mean_interval_min: 150
+  minutes: [1, 3]
+  report_probability: 0.05
+
+defect_names:
+  WELD_SPOT: "Непровар сварной точки"
+  WELD_GEOM: "Отклонение геометрии кузова"
+  PAINT_RUN: "Подтёк ЛКП"
+  PAINT_ORANGE: "Шагрень"
+  PAINT_DIRT: "Сорность (включения)"
+  ASSY_GAP: "Зазоры и перепады"
+  ASSY_TORQUE: "Момент затяжки"
+
+# Типы оборудования: нормальная телеметрия [среднее, ст. откл.], плановое ТО, режимы отказов.
+# weibull.scale_h — характерная наработка в моточасах; shape > 1 — износ, = 1 — случайные сбои.
+# precursor — предвестник: за lead_min моточасов до отказа сигналы плавно растут (доля прироста к норме).
+equipment_types:
+  robot:
+    telemetry: { temperature: [45.0, 1.2], vibration: [1.2, 0.12], current: [8.0, 0.35] }
+    maintenance: { interval_h: 160, duration_min: 30, renews_wear: true }
+    failure_modes:
+      - id: sensor_error
+        reason: breakdown
+        reason_text: "Ошибка датчика"
+        subtype: "датчик"
+        weibull: { shape: 1.0, scale_h: 70 }
+        repair_min: { median: 24, sigma: 0.35 }
+        precursor: null
+
+  paint_booth:
+    telemetry: { temperature: [23.0, 0.35], vibration: [0.8, 0.08], current: [15.0, 0.4] }
+    maintenance: { interval_h: 160, duration_min: 40, renews_wear: true }
+    filter:
+      dp_new_pa: 120
+      dp_limit_pa: 450              # при достижении — вынужденная остановка на замену
+      dp_defect_from_pa: 300        # выше — растёт сорность
+      defect_rate_at_limit: 0.100   # добавка к браку окраски при dp = предел
+      life_h: [125, 25]             # наработка фильтра до засорения, моточасы [среднее, ст. откл.]
+      replace_min: { median: 40, sigma: 0.12 }
+      reason: consumables
+      reason_text: "Замена фильтра"
+      subtype: "фильтр"
+    failure_modes: []
+
+  oven:
+    telemetry: { temperature: [160.0, 1.2], vibration: [0.6, 0.06], current: [22.0, 0.6] }
+    maintenance: { interval_h: 240, duration_min: 30, renews_wear: true }
+    failure_modes:
+      - id: burner_fault
+        reason: breakdown
+        reason_text: "Сбой горелки печи"
+        subtype: "горелка"
+        weibull: { shape: 1.5, scale_h: 420 }
+        repair_min: { median: 35, sigma: 0.3 }
+        precursor: { lead_min: [30, 90], temperature_std_x: 4.0 }
+
+  conveyor:
+    telemetry: { temperature: [40.0, 0.8], vibration: [2.0, 0.18], current: [12.0, 0.35] }
+    maintenance: { interval_h: 200, duration_min: 30, renews_wear: true }
+    failure_modes:
+      - id: chain_break
+        reason: breakdown
+        reason_text: "Обрыв цепи"
+        subtype: "цепь"
+        weibull: { shape: 3.0, scale_h: 260 }
+        repair_min: { median: 50, sigma: 0.2 }
+        precursor: { lead_min: [60, 180], current: 0.35, vibration: 1.5 }
+
+  test_stand:
+    telemetry: { temperature: [30.0, 0.5], vibration: [0.4, 0.05], current: [3.0, 0.15] }
+    maintenance: { interval_h: 300, duration_min: 20, renews_wear: true }
+    failure_modes:
+      - id: calibration_fault
+        reason: breakdown
+        reason_text: "Сбой калибровки стенда"
+        subtype: "калибровка"
+        weibull: { shape: 1.0, scale_h: 500 }
+        repair_min: { median: 15, sigma: 0.3 }
+        precursor: null

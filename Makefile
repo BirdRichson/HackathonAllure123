@@ -37,7 +37,7 @@ demo: build
 	cd backend && ../$(PY) -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 seed:
-	@echo "Генерация истории появится на этапе 1."
+	cd backend && ../$(PY) -m app.sim.history
 
 train:
 	@echo "Обучение моделей появится на этапе 4."
