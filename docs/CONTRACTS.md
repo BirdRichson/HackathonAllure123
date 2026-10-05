@@ -129,6 +129,7 @@
 | `GET /api/kpi/history?area=&shifts=12` | KPI закрытых смен участка | ✅ |
 | `GET /api/areas/{id}` | страница цеха: участок, оборудование с ТО, KPI (смена, сутки, история), Парето простоев за 30 дней, отчёты, инциденты | ✅ |
 | `GET /api/equipment/{id}?hours=8` | карточка: состояние, телеметрия за N часов, норма сигналов, остановки за 30 дней, отчёты | ✅ |
+| `GET /api/events?hours=8&area=&scope=` | события состояний за N часов: `initial` (состояние на начало окна) и `events` — для временной шкалы | ✅ |
 | `GET /api/maintenance` | статус ТО по всему оборудованию | ✅ |
 | `GET /api/downtime/pareto?area=&days=30` | причины и оборудование по минутам простоя | ✅ |
 | `GET /api/incidents?status=&area=&limit=` | инциденты | ✅ |
@@ -143,7 +144,7 @@
 | `GET /api/insights`, `POST /api/insights/refresh` | выводы ИИ | ⏳ 4 |
 | `GET /api/predictions` | прогнозы отказов | ⏳ 4 |
 | `GET /api/plan/forecast` | прогноз месяца против 5500 | ⏳ 4 |
-| `POST /api/scenarios/{name}/trigger` | сценарии демо | ⏳ 5 |
+| `GET /api/scenarios`, `POST /api/scenarios/{name}/trigger` | сценарии демо: `sensor_fault` (ABB-01), `chain_break` (Конвейер-03, предвестник ~25 мин), `filter_clog` (Камера-02) | ✅ |
 | `POST /api/whatif`, `GET /api/bottlenecks`, `POST /api/assistant/ask` | после 8.10 | — |
 
 ## Импорт данных организаторов ✅

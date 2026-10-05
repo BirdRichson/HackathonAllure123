@@ -418,3 +418,32 @@ def reconciliation(rt: "Runtime", days: float = 7) -> list[dict]:
                         "unregistered_min": round(lost - reg, 1),
                         "breakdown": {k2: v for k2, v in k["lost_min"].items() if v > 0}})
     return out
+
+
+def events(rt: "Runtime", hours: float = 8, area_id: str | None = None, scope: str | None = None) -> dict:
+    """События состояний за последние N часов — для временной шкалы и ленты в «Мониторинге»."""
+    w = rt.world
+    sim = w.sim
+    t0 = max(0.0, sim.now - hours * 60)
+    ev = sim.rec.events
+    i = bisect_left(ev, (t0,))
+    start_state = {}
+    for e in reversed(ev[:i]):             # состояние каждого объекта на начало окна
+        key = (e[1], e[2])
+        if key not in start_state:
+            start_state[key] = e
+        if len(start_state) >= len(sim.areas) + len(sim.equipment):
+            break
+    rows = [e for e in ev[i:]]
+    if area_id:
+        rows = [e for e in rows if e[3] == area_id]
+    if scope:
+        rows = [e for e in rows if e[1] == scope]
+    # Объекты без событий до окна: участок — вне смены, оборудование — исправно.
+    for a_id in sim.areas:
+        start_state.setdefault(("area", a_id), (t0, "area", a_id, a_id, "offline", "", "", False))
+    for eq in sim.equipment.values():
+        start_state.setdefault(("equipment", eq.id), (t0, "equipment", eq.id, eq.area_id, "running", "", "", False))
+    initial = [_event(w, e) | {"ts": w.iso(t0)} for k, e in start_state.items()
+               if (not area_id or e[3] == area_id) and (not scope or e[1] == scope)]
+    return {"from": w.iso(t0), "to": w.iso(sim.now), "initial": initial, "events": [_event(w, e) for e in rows]}

@@ -1,102 +1,99 @@
-import { useEffect, useState } from "react";
+import { api } from "../api/client";
+import { hhmm, longDate } from "../format";
+import { useLive } from "../store/live";
+import { TABS, useUi } from "../store/ui";
 
-import { useAppStore } from "../store/useAppStore";
-import type { Shift } from "../types";
-
-const PLANT_OFFSET_MS = 5 * 3600 * 1000; // Костанай, UTC+5
-
-function plantNow(): Date {
-  // Сдвигаем на UTC+5 и дальше читаем через getUTC*, чтобы не зависеть от часового пояса ноутбука.
-  return new Date(Date.now() + PLANT_OFFSET_MS);
-}
-
-function toMinutes(hhmm: string): number {
-  const [h = "0", m = "0"] = hhmm.split(":");
-  const total = Number(h) * 60 + Number(m);
-  return total === 0 ? 24 * 60 : total;
-}
-
-function currentShift(shifts: Shift[], now: Date): Shift | null {
-  const minutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+export function SpeedControl() {
+  const status = useLive((s) => s.status);
+  if (!status) return null;
   return (
-    shifts.find((s) => {
-      const start = toMinutes(s.start) % (24 * 60);
-      return minutes >= start && minutes < toMinutes(s.end);
-    }) ?? null
+    <div className="flex items-center gap-1" role="group" aria-label="Скорость времени завода">
+      <button
+        type="button"
+        onClick={() => api.control({ paused: !status.paused })}
+        className="flex h-8 w-8 items-center justify-center rounded-md border border-line bg-panel text-ink hover:bg-sunk"
+        title={status.paused ? "Продолжить" : "Пауза"}
+        aria-label={status.paused ? "Продолжить" : "Пауза"}
+      >
+        {status.paused ? "▶" : "❚❚"}
+      </button>
+      <div className="flex rounded-md border border-line bg-sunk p-0.5">
+        {status.speeds.map((sp) => (
+          <button
+            key={sp}
+            type="button"
+            onClick={() => api.control({ speed: sp })}
+            className={`rounded px-2 py-1 text-sm ${
+              sp === status.speed ? "bg-panel font-semibold text-ink shadow-sm" : "text-muted hover:text-ink"
+            }`}
+            aria-pressed={sp === status.speed}
+          >
+            ×{sp}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
-
 export function TopBar() {
-  const { connection, health, plant } = useAppStore();
-  const [now, setNow] = useState(plantNow);
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(plantNow()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const shift = plant ? currentShift(plant.schedule.shifts, now) : null;
-  const time = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
-  const date = `${pad(now.getUTCDate())}.${pad(now.getUTCMonth() + 1)}.${now.getUTCFullYear()}`;
-  const isDemo = (health?.data_mode ?? "demo") === "demo";
+  const { status, shift, connection } = useLive();
+  const { tab, setTab } = useUi();
 
   return (
-    <header className="flex items-center justify-between gap-6 border-b border-line bg-panel px-6 py-3">
+    <header className="flex h-16 shrink-0 items-center gap-6 border-b border-line bg-panel px-5">
       <div className="flex items-center gap-3">
-        <div className="h-8 w-8 rounded-sm bg-accent" aria-hidden />
-        <div>
-          <div className="text-lg font-semibold tracking-wide">АЛЛЮР</div>
-          <div className="text-sm text-muted">Цифровой двойник завода</div>
+        <div className="cond flex h-9 items-center rounded-sm bg-signal px-2.5 text-lg font-semibold tracking-wide text-white">
+          АЛЛЮР
+        </div>
+        <div className="leading-tight">
+          <div className="text-[15px] font-semibold">Цифровой двойник завода</div>
+          <div className="text-xs text-muted">Костанай, линии сварки, окраски и сборки</div>
         </div>
       </div>
 
-      <div className="flex items-center gap-6">
-        <div className="text-right">
-          <div className="font-mono text-3xl leading-none">{time}</div>
-          <div className="mt-1 text-sm text-muted">{date} · Костанай, UTC+5</div>
-        </div>
-        <div className="rounded border border-line bg-panel-2 px-3 py-2 text-sm">
-          {shift ? (
-            <>
-              <span className="font-semibold">Смена {shift.id}</span>
-              <span className="text-muted">
-                {" "}
-                · {shift.start}–{shift.end}
-              </span>
-            </>
-          ) : (
-            <span className="text-muted">Вне смены</span>
-          )}
-        </div>
-      </div>
+      <nav className="flex h-full items-stretch gap-1" aria-label="Разделы">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`border-b-[3px] px-3 text-[15px] ${
+              tab === t.id ? "border-signal font-semibold text-ink" : "border-transparent text-muted hover:text-ink"
+            }`}
+            aria-current={tab === t.id ? "page" : undefined}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
-      <div className="flex items-center gap-3 text-sm">
-        <span
-          className="rounded border px-3 py-1.5 font-medium"
-          style={{
-            borderColor: isDemo ? "var(--color-warn)" : "var(--color-ok)",
-            color: isDemo ? "var(--color-warn)" : "var(--color-ok)",
-          }}
-        >
-          {isDemo ? "Демо-данные" : "Данные завода"}
-        </span>
-        <span className="flex items-center gap-2 text-muted">
-          <span
-            className="inline-block h-2.5 w-2.5 rounded-full"
-            style={{
-              background:
-                connection === "online"
-                  ? "var(--color-ok)"
-                  : connection === "offline"
-                    ? "var(--color-bad)"
-                    : "var(--color-off)",
-            }}
-            aria-hidden
-          />
-          {connection === "online" ? "Сервер на связи" : connection === "offline" ? "Нет связи с сервером" : "Подключение…"}
-        </span>
+      <div className="ml-auto flex items-center gap-5">
+        {status && shift && (
+          <div className="flex items-center gap-3">
+            <div className="cond text-[34px] leading-none font-semibold">{hhmm(status.sim_time)}</div>
+            <div className="text-sm leading-tight">
+              <div className="font-medium">
+                {shift.in_shift ? `Смена ${shift.id}, до ${hhmm(shift.end)}` : "Вне смены"}
+              </div>
+              <div className="text-muted">{longDate(status.sim_time)}</div>
+            </div>
+          </div>
+        )}
+        <SpeedControl />
+        <div className="flex flex-col items-end text-xs leading-tight">
+          <span className="rounded border border-warn px-1.5 py-0.5 font-medium text-warn" title="Данные модели, откалиброванной по тестовым данным организаторов">
+            Демо-данные
+          </span>
+          <span className="mt-1 flex items-center gap-1 text-muted">
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ background: connection === "online" ? "var(--color-ok)" : "var(--color-bad)" }}
+              aria-hidden
+            />
+            {connection === "online" ? "Поток данных идёт" : connection === "offline" ? "Нет связи" : "Подключение"}
+          </span>
+        </div>
       </div>
     </header>
   );

@@ -134,3 +134,37 @@ def test_reset_returns_to_start(client):
     r.advance(120)
     asyncio.run(r.reset())
     assert r.world.sim.now == pytest.approx((r.settings.start - r.world.sim.cal.start).total_seconds() / 60)
+
+
+def test_events_window(client):
+    e = client.get("/api/events?hours=2&scope=equipment").json()
+    assert {x["scope"] for x in e["initial"]} == {"equipment"}
+    assert len(e["initial"]) == 12
+
+
+def test_old_draft_not_hijacked_by_new_report(client):
+    """Старый черновик (больше 2 ч назад) не заполняется новым отчётом — создаётся отдельная запись."""
+    old = [r for r in client.get("/api/reports?status=draft&limit=200").json()]
+    r = rt(client)
+    now = r.world.iso(r.world.sim.now)
+    stale = next((d for d in old if d["ts_end"] and d["ts_end"] < now[:11] + "00:00:00+05:00"), None)
+    if stale is None:
+        return
+    rep = client.post("/api/reports", json={"equipment_id": stale["equipment_id"], "reason": "breakdown",
+                                            "description": "новая поломка"}).json()
+    assert rep["id"] != stale["id"]
+    explicit = client.post("/api/reports", json={"equipment_id": stale["equipment_id"], "reason": "other",
+                                                 "description": "дозаполнил старую", "report_id": stale["id"]}).json()
+    assert explicit["id"] == stale["id"] and explicit["status"] == "completed"
+
+
+def test_scenarios_trigger(client):
+    sc = client.get("/api/scenarios").json()
+    assert {"sensor_fault", "chain_break", "filter_clog"} <= set(sc)
+    r = rt(client)
+    assert client.post("/api/scenarios/sensor_fault/trigger").json()["equipment_id"] == "ABB-01"
+    client.post("/api/sim/control", json={"speed": 60, "paused": False})
+    r.advance(5)
+    assert r.world.sim.equipment["ABB-01"].status == "down"
+    assert client.post("/api/scenarios/nope/trigger").status_code == 404
+    client.post("/api/sim/control", json={"speed": 10})

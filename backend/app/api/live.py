@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app import views
+from app.scenarios.demo import SCENARIOS, trigger
 
 router = APIRouter(prefix="/api")
 
@@ -49,6 +50,13 @@ def equipment(request: Request, eq_id: str, hours: float = 8) -> dict[str, Any]:
     return res
 
 
+@router.get("/events")
+def events(request: Request, hours: float = 8, area: str | None = None,
+           scope: Literal["area", "equipment"] | None = None) -> dict[str, Any]:
+    """События состояний за N часов: начальное состояние каждого объекта + изменения."""
+    return views.events(rt(request), hours, area, scope)
+
+
 @router.get("/maintenance")
 def maintenance(request: Request) -> list[dict]:
     return views.maintenance(rt(request))
@@ -88,3 +96,17 @@ async def sim_control(request: Request, body: SimControl) -> dict[str, Any]:
         raise HTTPException(400, str(e)) from e
     await runtime.broadcast({"type": "status", "payload": status})
     return status
+
+
+@router.get("/scenarios")
+def scenarios() -> dict[str, Any]:
+    """Сценарии демо для пульта ведущего."""
+    return {k: {"title": v["title"], "details": v["details"]} for k, v in SCENARIOS.items()}
+
+
+@router.post("/scenarios/{name}/trigger")
+def scenario_trigger(request: Request, name: str) -> dict[str, Any]:
+    try:
+        return trigger(rt(request).world.sim, name)
+    except KeyError as e:
+        raise HTTPException(404, "Сценарий не найден") from e

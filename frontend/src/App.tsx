@@ -1,56 +1,46 @@
 import { useEffect } from "react";
 
-import { MonthPlanPanel } from "./components/MonthPlanPanel";
-import { PlantFlow } from "./components/PlantFlow";
-import { TargetsPanel } from "./components/TargetsPanel";
+import { DemoPanel } from "./components/DemoPanel";
 import { TopBar } from "./components/TopBar";
-import { useAppStore } from "./store/useAppStore";
+import { AreaPanel } from "./pages/AreaPanel";
+import { DataPage } from "./pages/DataPage";
+import { DowntimePage } from "./pages/DowntimePage";
+import { ForecastPage } from "./pages/ForecastPage";
+import { MonitoringPage } from "./pages/MonitoringPage";
+import { PlantPage } from "./pages/PlantPage";
+import { initLive, useLive } from "./store/live";
+import { useUi } from "./store/ui";
 
 export default function App() {
-  const { connection, plant, targets, load, pingHealth } = useAppStore();
+  const tab = useUi((s) => s.tab);
+  const connection = useLive((s) => s.connection);
+  const ready = useLive((s) => s.kpi !== null);
 
   useEffect(() => {
-    void load();
-    const id = setInterval(() => void pingHealth(), 5000);
-    return () => clearInterval(id);
-  }, [load, pingHealth]);
+    void initLive();
+  }, []);
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex h-full min-h-[760px] min-w-[1280px] flex-col">
       <TopBar />
-
       {connection === "offline" && (
-        <div className="border-b border-line px-6 py-2 text-sm" style={{ color: "var(--color-bad)" }}>
-          ✕ Сервер не отвечает. Запустите бэкенд: <code className="font-mono">make dev</code> или{" "}
-          <code className="font-mono">docker compose up</code>.
+        <div className="border-b border-line bg-[#fbe2df] px-5 py-2 text-sm text-bad">
+          Нет связи с сервером. Запустите его командой <b>make dev</b> или <b>make demo</b> — интерфейс подключится сам.
         </div>
       )}
-
-      <main className="flex flex-1 flex-col gap-6 p-6">
-        {plant && (
-          <section>
-            <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted">Схема производства</h2>
-            <PlantFlow plant={plant} />
-          </section>
-        )}
-
-        {plant && targets && (
-          <section className="grid grid-cols-[2fr_1fr] gap-6">
-            <div>
-              <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted">Целевые показатели</h2>
-              <TargetsPanel targets={targets} />
-            </div>
-            <div>
-              <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted">План</h2>
-              <MonthPlanPanel plant={plant} targets={targets} />
-            </div>
-          </section>
-        )}
-
-        <p className="mt-auto text-sm text-muted">
-          Этап 0 — каркас. Состояния оборудования, KPI в реальном времени и прогнозы появятся на следующих этапах.
-        </p>
-      </main>
+      {!ready ? (
+        <div className="flex flex-1 items-center justify-center text-muted">Подключаюсь к заводу…</div>
+      ) : (
+        <>
+          {tab === "plant" && <PlantPage />}
+          {tab === "monitoring" && <MonitoringPage />}
+          {tab === "forecast" && <ForecastPage />}
+          {tab === "downtime" && <DowntimePage />}
+          {tab === "data" && <DataPage />}
+          <AreaPanel />
+        </>
+      )}
+      <DemoPanel />
     </div>
   );
 }

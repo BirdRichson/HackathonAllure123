@@ -19,7 +19,8 @@ class ReportIn(BaseModel):
     actions_taken: str = Field("", max_length=2000)
     reporter_role: Literal["оператор", "наладчик", "мастер"] = "оператор"
     duration_min: float | None = None
-    complete_draft: bool = True       # дополнить черновик от станка, если он есть
+    complete_draft: bool = True       # дополнить свежий черновик от станка, если он есть
+    report_id: str | None = None      # дополнить конкретную запись журнала
     source: Literal["operator_form", "telegram"] = "operator_form"
 
 

@@ -266,11 +266,20 @@ class Runtime:
     def submit_report(self, data: dict) -> dict:
         """Отчёт с формы рабочего. Если по оборудованию есть черновик от станка — дополняет его."""
         world = self.world
-        drafts = self.db.list_reports(equipment=data["equipment_id"], status="draft", limit=1)
         values = {k: data.get(k) or "" for k in ("reason", "description", "actions_taken", "reporter_role")}
         values.update(status="completed", source=data.get("source") or "operator_form")
-        if drafts and drafts[0]["source"] == "machine" and data.get("complete_draft", True):
-            rid = drafts[0]["id"]
+        target = None
+        if data.get("report_id"):                  # рабочий выбрал конкретную запись в журнале
+            target = self.db.get_report(data["report_id"])
+        elif data.get("complete_draft", True):     # иначе — свежий черновик станка (идёт сейчас или до 2 ч назад)
+            drafts = self.db.list_reports(equipment=data["equipment_id"], status="draft", limit=1)
+            if drafts and drafts[0]["source"] == "machine":
+                end = drafts[0]["ts_end"] or world.iso(world.sim.now)
+                age_min = (datetime.fromisoformat(world.iso(world.sim.now)) - datetime.fromisoformat(end)).total_seconds() / 60
+                if age_min <= 120:
+                    target = drafts[0]
+        if target is not None and target["equipment_id"] == data["equipment_id"]:
+            rid = target["id"]
             self.db.update_report(rid, values)
             world.user_touched.add(rid)
         else:
