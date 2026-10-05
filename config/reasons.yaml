@@ -1,0 +1,21 @@
+# Справочник причин простоя.
+# codes — единые коды двойника; mapping — текст причины из данных организаторов → код.
+# Неизвестный текст при импорте попадает в `other` с предупреждением.
+
+codes:
+  breakdown:            { label: "Поломка",                    planned: false }
+  consumables:          { label: "Замена расходников",         planned: false }
+  planned_maintenance:  { label: "Плановое ТО",                planned: true  }
+  starved:              { label: "Нет входа (голодание)",      planned: false }
+  blocked:              { label: "Выход занят (блокировка)",   planned: false }
+  no_material:          { label: "Нет комплектующих",          planned: false }
+  changeover:           { label: "Переналадка на другую модель", planned: true }
+  quality_hold:         { label: "Остановка по качеству",      planned: false }
+  operator:             { label: "Оператор",                   planned: false }
+  other:                { label: "Прочее",                     planned: false }
+
+mapping:
+  "Ошибка датчика": { code: breakdown,           subtype: "электрика / датчики" }
+  "Обрыв цепи":     { code: breakdown,           subtype: "механика" }
+  "Плановое ТО":    { code: planned_maintenance }
+  "Замена фильтра": { code: consumables }        # решение D11: внеплановая остановка

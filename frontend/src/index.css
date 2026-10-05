@@ -1,0 +1,39 @@
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "tailwindcss";
+
+/* Тема «диспетчерская»: тёмная, высокий контраст для проектора. Цвета состояний — единые на всех экранах. */
+@theme {
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-base: #0a0f15;
+  --color-panel: #111922;
+  --color-panel-2: #172230;
+  --color-line: #263445;
+  --color-ink: #eef3f8;
+  --color-muted: #a3b4c6;
+  --color-accent: #f08a3c;
+
+  --color-ok: #2fbf71;     /* running */
+  --color-warn: #f2b01e;   /* starved / blocked */
+  --color-bad: #f0524f;    /* down */
+  --color-info: #4c8dff;   /* maintenance / setup */
+  --color-off: #6b7787;    /* offline */
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-base);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}

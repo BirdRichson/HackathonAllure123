@@ -1,0 +1,59 @@
+# Модель завода для цифрового двойника.
+# Источник: тестовые данные организаторов (05.10.2026) и решения D1–D11 (docs/TEST_DATA.md).
+# source: data        — значение есть в данных организаторов
+# source: assumption  — допущение проекта (в интерфейсе помечается как «допущение модели»)
+# Параметры отказов, ремонтов и телеметрии добавляются на этапе 1 (симулятор).
+
+meta:
+  name: "Автозавод АЛЛЮР — модель по тестовым данным"
+  timezone: "+05:00"
+
+schedule:
+  shifts_per_day: 2                 # data
+  shift_hours: 8                    # data
+  shifts:                           # assumption: время начала смен
+    - { id: 1, start: "08:00", end: "16:00" }
+    - { id: 2, start: "16:00", end: "00:00" }
+  working_weekdays: [1, 2, 3, 4, 5] # D10: пн–пт, 22 рабочих дня в месяце
+
+rates:
+  plan_units_per_shift: 120         # data (D1): план на линию за смену
+  takt_min: 4.0                     # 480 мин / 120 — плановый такт
+  ideal_cycle_min: 3.8              # D2: паспортный идеальный цикл для расчёта OEE
+
+models:                             # data: месячный план по моделям (D6 — смешанный поток)
+  - { id: ONIX,   name: "Chevrolet Onix",   plan_month_units: 2500 }
+  - { id: COBALT, name: "Chevrolet Cobalt", plan_month_units: 1800 }
+  - { id: J7,     name: "JAC J7",           plan_month_units: 500 }
+
+flow: [WH, WELD, PAINT, ASSY, QC, FG] # data: схема участков
+
+areas:
+  - { id: WH,    name: "Склад комплектующих",       line_id: null,        source: data }
+  - { id: WELD,  name: "Сварка",                    line_id: "Сварка-1",  source: data }
+  - { id: PAINT, name: "Окраска",                   line_id: "Окраска-1", source: data }
+  - { id: ASSY,  name: "Сборка",                    line_id: "Сборка-1",  source: data }
+  - { id: QC,    name: "Контроль качества",         line_id: null,        source: data }
+  - { id: FG,    name: "Склад готовой продукции",   line_id: null,        source: data }
+
+buffers:                            # assumption: ёмкость буферов между участками, кузовов
+  - { from: WH,    to: WELD,  capacity: null, note: "запас CKD-комплектов задаётся в часах на этапе 1" }
+  - { from: WELD,  to: PAINT, capacity: 12 }
+  - { from: PAINT, to: ASSY,  capacity: 15 }
+  - { from: ASSY,  to: QC,    capacity: 8 }
+
+# id — ASCII для кода и API; name — название как в данных организаторов (показывается в интерфейсе).
+# critical — D5: оборудование, остановка которого останавливает линию.
+equipment:
+  - { id: ABB-01,  name: "ABB-01",          area: WELD,  type: robot,      critical: true, source: data }
+  - { id: ABB-02,  name: "ABB-02",          area: WELD,  type: robot,      critical: true, source: assumption }
+  - { id: ABB-03,  name: "ABB-03",          area: WELD,  type: robot,      critical: true, source: assumption }
+  - { id: ABB-04,  name: "ABB-04",          area: WELD,  type: robot,      critical: true, source: data }
+  - { id: CAM-01,  name: "Камера-01",       area: PAINT, type: paint_booth, critical: true, source: assumption }
+  - { id: CAM-02,  name: "Камера-02",       area: PAINT, type: paint_booth, critical: true, source: data }
+  - { id: OVEN-01, name: "Печь сушки",      area: PAINT, type: oven,       critical: true, source: assumption }
+  - { id: CONV-01, name: "Конвейер-01",     area: ASSY,  type: conveyor,   critical: true, source: assumption }
+  - { id: CONV-02, name: "Конвейер-02",     area: ASSY,  type: conveyor,   critical: true, source: assumption }
+  - { id: CONV-03, name: "Конвейер-03",     area: ASSY,  type: conveyor,   critical: true, source: data }
+  - { id: QC-01,   name: "Стенд геометрии", area: QC,    type: test_stand, critical: false, source: assumption }
+  - { id: QC-02,   name: "Стенд герметичности", area: QC, type: test_stand, critical: false, source: assumption }

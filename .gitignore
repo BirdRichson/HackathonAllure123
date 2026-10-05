@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+backend/*.db
+backend/ml_train/artifacts/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Данные, которые генерируются
+data/synthetic/*
+!data/synthetic/.gitkeep
+
+# Секреты и окружение
+.env
+
+# Система
+.DS_Store
+Thumbs.db
