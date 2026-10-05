@@ -80,14 +80,40 @@
  "recommendation":"Заменить/натянуть цепь Конвейера-03 в пересменку"}
 ```
 
-### Узкое место ⏳ (этап 5)
+### Отчёт о простое ⏳ (этапы 1–2)
+Второй источник данных — люди. Станок остановился — система создаёт `draft` с временем и оборудованием. Рабочий указывает причину и описание с планшета или через Telegram, и отчёт становится `completed`.
+```json
+{"id":"R-000187","equipment_id":"CAM-02","area_id":"PAINT","ts_start":"...","ts_end":"...",
+ "source":"machine|operator_form|telegram|import","reporter_role":"оператор|наладчик|мастер",
+ "reason":"consumables","description":"камера встала, фильтр забит, давление в красной зоне",
+ "actions_taken":"заменили фильтр, 40 мин","status":"draft|completed"}
+```
+
+### Статус ТО ⏳ (этап 2)
+```json
+{"equipment_id":"CAM-02","interval_h":160,"hours_since":131.5,"hours_left":28.5,
+ "next_due_ts":"...","last_done_ts":"..."}
+```
+
+### Вывод ИИ ⏳ (этап 4)
+```json
+{"id":"INS-0012","ts":"...","scope":"plant|area|equipment","target_id":"CAM-02",
+ "kind":"recurring|quality_link|maintenance|misclassified|failure_risk|plan_risk",
+ "title":"Фильтр Камеры-02 забивается раньше интервала ТО",
+ "explanation":"...","evidence":[{"type":"report","ref":"R-000187"},{"type":"metric","ref":"PAINT.defect_rate"}],
+ "recommendation":"Менять фильтр в пересменку каждые 110 моточасов",
+ "expected_effect":{"units_month":95,"downtime_min_month":160},
+ "confidence":0.8,"source":"llm|ml|rules"}
+```
+
+### Узкое место ⏳ (после 8.10)
 ```json
 {"ts":"...","area_id":"PAINT","score":0.86,"horizon_min":120,"reason":"наибольший активный период, буфер перед участком заполнен на 90%"}
 ```
 
 ## WebSocket ⏳ (этап 2)
 
-`/ws/live` — сообщения `{"type": "...", "payload": {...}}`. Типы: `snapshot` | `event` | `kpi` | `alert` | `prediction` | `bottleneck`. При подключении сначала приходит `snapshot` (полное состояние), затем дельты.
+`/ws/live` — сообщения `{"type": "...", "payload": {...}}`. Типы: `snapshot` | `event` | `kpi` | `alert` | `prediction` | `report` | `insight`. При подключении сначала приходит `snapshot` (полное состояние), затем дельты.
 
 ## REST
 
@@ -96,19 +122,26 @@
 | `GET /api/health` | `{status, version, data_mode, time}` | ✅ |
 | `GET /api/plant` | модель завода из `plant.yaml` | ✅ |
 | `GET /api/targets` | целевые показатели из `targets.yaml` | ✅ |
+| `GET /api/areas/{id}` | сводка для страницы цеха: оборудование, ТО, KPI, простои, отчёты, выводы ИИ | ⏳ 2 |
 | `GET /api/kpi?scope=&id=&from=&to=` | KPI | ⏳ 2 |
 | `GET /api/incidents?status=` | инциденты | ⏳ 2 |
-| `GET /api/equipment/{id}` | карточка оборудования | ⏳ 2 |
-| `GET /api/report/shift?date=&shift=` | отчёт смены | ⏳ 5 |
-| `GET /api/plan/forecast?month=` | прогноз выпуска на конец месяца против цели, по моделям | ⏳ 5 |
-| `GET /api/reconciliation?from=&to=` | сверка потерь времени с простоями | ⏳ 2 |
+| `GET /api/equipment/{id}` | карточка оборудования с телеметрией | ⏳ 2 |
+| `GET /api/maintenance` | статус планового ТО по оборудованию | ⏳ 2 |
+| `GET /api/reports?area=&equipment=&status=` | журнал отчётов о простоях | ⏳ 2 |
+| `POST /api/reports` | новый отчёт рабочего | ⏳ 2 |
+| `PATCH /api/reports/{id}` | дополнить черновик причиной и описанием | ⏳ 2 |
+| `GET /api/insights?scope=&id=` | выводы ИИ | ⏳ 4 |
+| `POST /api/insights/refresh` | пересчитать выводы ИИ | ⏳ 4 |
 | `GET /api/predictions` | прогнозы отказов | ⏳ 4 |
-| `GET /api/bottlenecks` | узкие места | ⏳ 5 |
+| `GET /api/plan/forecast?month=` | прогноз выпуска на конец месяца против цели, по моделям | ⏳ 4 |
+| `GET /api/reconciliation?from=&to=` | сверка потерь времени с простоями | ⏳ 2 |
 | `POST /api/sim/control` | `{speed, pause, reset, seed}` | ⏳ 2 |
-| `POST /api/scenarios/{name}/trigger` | запуск сценария демо | ⏳ 7 |
-| `POST /api/whatif` | «что если»: потери выпуска с интервалом | ⏳ 5 |
+| `POST /api/scenarios/{name}/trigger` | запуск сценария демо | ⏳ 5 |
 | `POST /api/ingest` | загрузка docx / xlsx / csv | ⏳ 2 |
-| `POST /api/assistant/ask` | вопрос LLM-ассистенту | ⏳ 5 |
+| `GET /api/report/shift?date=&shift=` | отчёт смены | после 8.10 |
+| `GET /api/bottlenecks` | узкие места | после 8.10 |
+| `POST /api/whatif` | «что если»: потери выпуска с интервалом | после 8.10 |
+| `POST /api/assistant/ask` | вопрос LLM-ассистенту | после 8.10 |
 
 ## Импорт данных организаторов ⏳ (этап 2)
 
