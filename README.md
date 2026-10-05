@@ -45,10 +45,18 @@ make dev       # бэкенд :8000 + интерфейс :5173
 python -m venv .venv
 .venv\Scripts\pip install -r backend\requirements-dev.txt
 cd frontend; npm install; cd ..
-.\scripts\dev.ps1
+.\scripts\dev.cmd
 ```
 
-Откройте http://localhost:5173.
+Откройте http://localhost:5173 через 10–15 секунд: сервер сначала «проживает» 30 дней работы завода.
+
+`dev.cmd` запускает `dev.ps1` в обход запрета на сценарии PowerShell («не имеет цифровой подписи»). Можно и вручную, в двух окнах PowerShell:
+```powershell
+# окно 1 — сервер данных (из папки проекта)
+cd backend; ..\.venv\Scripts\python -m uvicorn app.main:app --port 8000
+# окно 2 — интерфейс (из папки проекта)
+cd frontend; npm run dev
+```
 
 ### Вариант 3. Docker
 
